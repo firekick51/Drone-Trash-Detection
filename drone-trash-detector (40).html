@@ -1,0 +1,2300 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>كشف المهملات بالذكاء الاصطناعي</title>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#07090f;--s1:#0d1120;--s2:#131828;--s3:#1a2038;
+  --green:#00e5a0;--gg:rgba(0,229,160,.12);
+  --red:#ff3d5a;--rg:rgba(255,61,90,.12);
+  --blue:#4d9fff;--bgg:rgba(77,159,255,.12);
+  --yellow:#ffd166;--yg:rgba(255,209,102,.12);
+  --bd:rgba(255,255,255,.08);--tx:#e0eeff;--mu:#4a6380;
+}
+/* LIGHT MODE */
+body.light{--bg:#f0f4f8;--s1:#fff;--s2:#f5f7fa;--s3:#e8ecf2;--bd:rgba(0,0,0,.09);--tx:#1a2535;--mu:#7a8fa6;--gg:rgba(0,180,120,.1);--rg:rgba(220,50,70,.1);--bgg:rgba(40,120,220,.1);}
+body.light .map-legend{background:rgba(255,255,255,.92);}
+body.light .loading-overlay{background:rgba(240,244,248,.9);}
+
+html,body{height:100%;font-family:'Tajawal',sans-serif;background:var(--bg);color:var(--tx);overflow:hidden;}
+
+/* ══ LAYOUT ══ */
+.app{display:grid;grid-template-rows:58px 1fr;grid-template-columns:380px 1fr;height:100vh;width:100vw;}
+
+/* HEADER — spans full width */
+.header{
+  grid-column:1/-1;
+  grid-row:1;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 18px;
+  background:var(--s1);
+  border-bottom:1px solid var(--bd);
+  position:relative;
+  z-index:100;
+}
+.header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,var(--green),transparent);opacity:.3;}
+
+/* SIDEBAR — right column (RTL so col 1 = right) */
+.sidebar{grid-column:1;grid-row:2;display:flex;flex-direction:column;overflow:hidden;background:var(--s1);border-left:1px solid var(--bd);}
+
+/* MAP — left column (RTL so col 2 = left) */
+.map-wrap{grid-column:2;grid-row:2;position:relative;overflow:hidden;}
+#map{position:absolute;inset:0;}
+
+/* ══ HEADER ══ */
+.logo{display:flex;align-items:center;gap:12px;}
+.logo-icon{width:42px;height:42px;background:linear-gradient(135deg,var(--green),#00b377);border-radius:12px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,229,160,.3);flex-shrink:0;}
+.logo-text{font-size:16px;font-weight:900;}
+.logo-text span{color:var(--green);}
+.logo-sub{font-size:9px;color:var(--mu);font-weight:700;letter-spacing:1.5px;margin-top:1px;}
+.hstats{display:flex;align-items:center;gap:10px;}
+.hstat{background:var(--s2);border:1px solid var(--bd);border-radius:10px;padding:5px 12px;font-size:11px;font-weight:700;display:flex;align-items:center;gap:6px;}
+.hstat .hdot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
+.theme-toggle{width:36px;height:36px;border-radius:10px;border:1px solid var(--bd);background:var(--s2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:all .2s;}
+.theme-toggle:hover{border-color:var(--green);transform:scale(1.08);}
+
+/* ══ SIDEBAR TABS ══ */
+.api-banner{background:rgba(255,209,102,.07);border-bottom:1px solid rgba(255,209,102,.2);padding:8px 14px;display:flex;align-items:center;gap:8px;flex-shrink:0;}
+.api-banner.ok{background:rgba(0,229,160,.07);border-color:rgba(0,229,160,.2);}
+.api-dot{width:7px;height:7px;border-radius:50%;background:var(--yellow);animation:blink 1.5s ease-in-out infinite;flex-shrink:0;}
+.api-banner.ok .api-dot{background:var(--green);animation:none;}
+.api-text{font-size:11px;font-weight:700;flex:1;}
+.api-set-btn{background:var(--s3);border:1px solid var(--bd);border-radius:7px;padding:4px 10px;font-family:'Tajawal',sans-serif;font-size:10px;font-weight:700;color:var(--tx);cursor:pointer;white-space:nowrap;transition:all .2s;}
+.api-set-btn:hover{border-color:var(--yellow);color:var(--yellow);}
+
+.tabs{display:flex;border-bottom:1px solid var(--bd);flex-shrink:0;}
+.tab{flex:1;padding:10px 4px;text-align:center;font-size:10px;font-weight:800;cursor:pointer;color:var(--mu);transition:all .2s;border-bottom:2px solid transparent;letter-spacing:.3px;}
+.tab.active{color:var(--green);border-bottom-color:var(--green);background:rgba(0,229,160,.04);}
+.tab:hover{color:var(--tx);}
+
+.panel{flex:1;overflow-y:auto;overflow-x:hidden;padding:14px;display:none;flex-direction:column;gap:11px;scrollbar-width:thin;scrollbar-color:var(--s3) transparent;}
+.panel.active{display:flex;}
+.panel::-webkit-scrollbar{width:3px;}
+.panel::-webkit-scrollbar-thumb{background:var(--s3);border-radius:3px;}
+
+/* ══ UPLOAD ══ */
+.mode-tabs{display:flex;gap:7px;}
+.mode-tab{flex:1;padding:9px;border-radius:10px;border:1.5px solid var(--bd);background:var(--s2);font-family:'Tajawal',sans-serif;font-size:12px;font-weight:800;color:var(--mu);cursor:pointer;transition:all .2s;text-align:center;}
+.mode-tab.active{border-color:var(--green);background:var(--gg);color:var(--green);}
+
+.upload-zone{background:var(--s2);border:2px dashed var(--bd);border-radius:16px;padding:20px 14px;text-align:center;cursor:pointer;transition:all .3s;color:var(--mu);}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--green);background:var(--gg);color:var(--green);}
+.uz-title{font-size:14px;font-weight:800;margin:10px 0 4px;color:var(--tx);}
+.uz-sub{font-size:11px;color:var(--mu);line-height:1.5;}
+.uz-formats{display:flex;gap:5px;justify-content:center;margin-top:10px;flex-wrap:wrap;}
+.uz-fmt{background:var(--s3);border:1px solid var(--bd);border-radius:5px;padding:2px 8px;font-size:10px;font-weight:700;color:var(--mu);}
+
+/* FILE QUEUE */
+.queue-header{display:flex;align-items:center;justify-content:space-between;}
+.queue-title{font-size:11px;font-weight:800;color:var(--mu);}
+.queue-btns{display:flex;gap:5px;}
+.file-cards{display:flex;flex-direction:column;gap:7px;max-height:240px;overflow-y:auto;scrollbar-width:thin;}
+.file-card{background:var(--s2);border:1px solid var(--bd);border-radius:11px;overflow:hidden;transition:border-color .2s;}
+.file-card.done{border-color:rgba(0,229,160,.25);}
+.file-card.analyzing{border-color:rgba(77,159,255,.35);}
+.file-card.error{border-color:rgba(255,61,90,.3);}
+.file-card-inner{display:flex;align-items:center;gap:9px;padding:9px 11px;}
+.file-thumb{width:44px;height:44px;border-radius:8px;background:var(--s3);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;overflow:hidden;}
+.file-thumb img{width:44px;height:44px;object-fit:cover;cursor:pointer;border-radius:8px;}
+.file-info{flex:1;min-width:0;}
+.file-name{font-size:11px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.file-meta{font-size:9px;color:var(--mu);margin-top:2px;}
+.file-gps{font-size:9px;margin-top:2px;}
+.file-status{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:var(--s3);color:var(--mu);white-space:nowrap;}
+
+/* GPS CARD */
+.loc-box{background:var(--s2);border:1px solid var(--bd);border-radius:14px;padding:13px;}
+.loc-title{font-size:12px;font-weight:800;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
+.loc-input{width:100%;background:var(--s3);border:1px solid var(--bd);border-radius:9px;padding:8px 10px;color:var(--tx);font-family:'Tajawal',sans-serif;font-size:12px;outline:none;transition:border-color .2s;}
+.loc-input:focus{border-color:var(--blue);}
+.loc-input::placeholder{color:var(--mu);}
+.loc-row{display:flex;gap:7px;margin-bottom:7px;}
+.loc-hint{font-size:10px;color:var(--mu);display:flex;align-items:center;gap:5px;margin-top:6px;}
+.loc-hint-dot{width:5px;height:5px;border-radius:50%;background:var(--blue);flex-shrink:0;}
+
+/* ANALYZE BTNS */
+.analyze-wrap{display:flex;gap:8px;}
+.analyze-btn{flex:1;padding:13px;border:none;border-radius:13px;font-family:'Tajawal',sans-serif;font-weight:900;font-size:14px;cursor:pointer;transition:all .25s;display:flex;align-items:center;justify-content:center;gap:7px;}
+.analyze-btn.primary{background:linear-gradient(135deg,var(--green),#00b377);color:#060b14;box-shadow:0 4px 20px rgba(0,229,160,.25);}
+.analyze-btn.primary:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,229,160,.4);}
+.analyze-btn.secondary{background:linear-gradient(135deg,var(--blue),#2563eb);color:#fff;box-shadow:0 4px 18px rgba(77,159,255,.25);}
+.analyze-btn.secondary:hover{transform:translateY(-2px);}
+.analyze-btn:disabled{opacity:.35;cursor:not-allowed;transform:none!important;}
+
+/* BATCH PROGRESS */
+.batch-prog{background:var(--s2);border:1px solid var(--bd);border-radius:12px;padding:12px;}
+.bp-header{display:flex;justify-content:space-between;margin-bottom:6px;}
+.bp-label{font-size:11px;font-weight:700;}
+.bp-pct{font-size:11px;font-weight:900;color:var(--green);}
+.prog-track{background:var(--s3);border-radius:6px;height:5px;overflow:hidden;margin-bottom:5px;}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--blue));border-radius:6px;width:0%;transition:width .4s;}
+.bp-sub{font-size:10px;color:var(--mu);}
+
+/* RESULT BOX */
+.result-box{background:var(--s2);border:1px solid var(--bd);border-radius:14px;overflow:hidden;}
+.rb-header{padding:10px 13px;border-bottom:1px solid var(--bd);display:flex;align-items:center;justify-content:space-between;}
+.rb-title{font-size:12px;font-weight:800;}
+.rb-badge{padding:3px 9px;border-radius:20px;font-size:10px;font-weight:800;}
+.rb-badge.high{background:var(--rg);color:var(--red);border:1px solid rgba(255,61,90,.3);}
+.rb-badge.medium{background:var(--yg);color:var(--yellow);border:1px solid rgba(255,209,102,.3);}
+.rb-badge.low{background:var(--gg);color:var(--green);border:1px solid rgba(0,229,160,.3);}
+.rb-body{padding:12px 13px;}
+.rb-desc{font-size:12px;line-height:1.6;margin-bottom:9px;}
+.rb-tags{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:9px;}
+.rb-tag{background:var(--s3);border:1px solid var(--bd);border-radius:6px;padding:2px 8px;font-size:10px;font-weight:700;color:var(--mu);}
+.rb-spots{display:flex;flex-direction:column;gap:6px;}
+.rb-spot{background:var(--s3);border:1px solid rgba(255,61,90,.2);border-radius:10px;padding:9px 11px;cursor:pointer;transition:all .2s;}
+.rb-spot:hover{border-color:var(--red);background:var(--rg);}
+.rb-add-all{width:100%;padding:10px;background:linear-gradient(135deg,var(--red),#c0392b);border:none;border-radius:10px;color:#fff;font-family:'Tajawal',sans-serif;font-weight:800;font-size:12px;cursor:pointer;margin-top:8px;transition:all .2s;}
+.rb-add-all:hover{transform:translateY(-1px);box-shadow:0 5px 18px var(--rg);}
+
+/* POINTS PANEL */
+.slbl{font-size:10px;font-weight:700;color:var(--mu);letter-spacing:2px;}
+.pt-item{background:var(--s2);border:1px solid var(--bd);border-radius:11px;padding:9px 12px;display:flex;flex-direction:column;gap:6px;transition:all .2s;}
+.pt-item:hover{border-color:rgba(255,61,90,.3);}
+.pt-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+.pt-dot.trash{background:var(--red);}
+.pt-name{font-size:12px;font-weight:800;}
+.pt-coords{font-size:10px;color:var(--mu);}
+.pt-del{background:none;border:none;color:var(--mu);cursor:pointer;font-size:13px;padding:2px 5px;border-radius:5px;transition:all .2s;}
+.pt-del:hover{background:var(--rg);color:var(--red);}
+.route-btns{display:flex;gap:7px;}
+.route-btn-g{flex:2;padding:10px;background:linear-gradient(135deg,#4285f4,#1a73e8);border:none;border-radius:10px;color:#fff;font-family:'Tajawal',sans-serif;font-weight:800;font-size:12px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:all .2s;}
+.route-btn-g:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(66,133,244,.3);}
+.route-btn-d{flex:1;padding:10px;background:rgba(66,133,244,.1);border:1.5px solid rgba(66,133,244,.3);border-radius:10px;color:#4285f4;font-family:'Tajawal',sans-serif;font-weight:800;font-size:11px;cursor:pointer;transition:all .2s;text-align:center;}
+.route-btn-d:hover{background:rgba(66,133,244,.2);}
+.clear-btn{width:100%;padding:9px;background:transparent;border:1.5px solid var(--bd);border-radius:10px;color:var(--mu);font-family:'Tajawal',sans-serif;font-weight:700;font-size:12px;cursor:pointer;transition:all .2s;}
+.clear-btn:hover{border-color:var(--red);color:var(--red);background:var(--rg);}
+
+/* HISTORY PANEL */
+.hist-card{background:var(--s2);border:1px solid var(--bd);border-radius:14px;overflow:hidden;}
+.hist-media{width:100%;height:130px;object-fit:cover;display:block;cursor:pointer;}
+.hist-body{padding:10px 12px;}
+.hist-name{font-size:12px;font-weight:800;margin-bottom:3px;}
+.hist-meta{font-size:10px;color:var(--mu);margin-bottom:7px;}
+.hist-desc{font-size:11px;line-height:1.5;background:var(--s3);border-radius:8px;padding:6px 9px;margin-bottom:7px;}
+.hist-btns{display:flex;gap:5px;}
+.hist-btn{flex:1;padding:6px;border-radius:7px;font-family:'Tajawal',sans-serif;font-size:10px;font-weight:700;cursor:pointer;text-align:center;text-decoration:none;display:block;transition:all .2s;}
+.hist-btn.map{background:var(--s3);border:1px solid var(--bd);color:var(--tx);}
+.hist-btn.map:hover{border-color:var(--green);}
+.hist-btn.gmaps{background:rgba(66,133,244,.12);border:1px solid rgba(66,133,244,.25);color:#4285f4;}
+.hist-btn.dl{background:var(--gg);border:1px solid rgba(0,229,160,.2);color:var(--green);}
+
+/* SETTINGS */
+.set-card{background:var(--s2);border:1px solid var(--bd);border-radius:14px;padding:14px;}
+.set-card-title{font-size:13px;font-weight:800;margin-bottom:3px;}
+.set-card-sub{font-size:10px;color:var(--mu);line-height:1.4;margin-bottom:10px;}
+.set-apply-btn{padding:9px 16px;background:linear-gradient(135deg,var(--green),#00b377);border:none;border-radius:9px;color:#060b14;font-family:'Tajawal',sans-serif;font-weight:800;font-size:12px;cursor:pointer;transition:all .2s;white-space:nowrap;}
+.set-apply-btn:hover{transform:scale(1.03);}
+.set-mini-btn{background:var(--s3);border:1px solid var(--bd);border-radius:8px;padding:6px 12px;font-family:'Tajawal',sans-serif;font-size:11px;font-weight:700;color:var(--mu);cursor:pointer;transition:all .2s;width:100%;text-align:right;}
+.set-mini-btn:hover{border-color:var(--green);color:var(--green);}
+.set-mini-btn.red{color:var(--red);}
+.set-mini-btn.red:hover{border-color:var(--red);background:var(--rg);}
+.map-type-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px;}
+.mtype-btn{background:var(--s3);border:1.5px solid var(--bd);border-radius:9px;padding:8px 4px;text-align:center;cursor:pointer;transition:all .2s;font-family:'Tajawal',sans-serif;font-size:11px;font-weight:700;color:var(--mu);}
+.mtype-btn:hover{border-color:rgba(77,159,255,.4);color:var(--blue);}
+.mtype-btn.active{border-color:var(--blue);background:var(--bgg);color:var(--blue);}
+.setting-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--bd);}
+.setting-row:last-child{border-bottom:none;}
+.setting-lbl{font-size:12px;font-weight:700;}
+.setting-hint{font-size:10px;color:var(--mu);margin-top:2px;}
+.s-ctrl{display:flex;align-items:center;gap:8px;}
+.s-btn{width:26px;height:26px;border-radius:7px;border:1px solid var(--bd);background:var(--s2);color:var(--tx);font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s;}
+.s-btn:hover{border-color:var(--green);color:var(--green);}
+.s-val{font-size:12px;font-weight:900;color:var(--green);min-width:40px;text-align:center;}
+.toggle-wrap{width:38px;height:21px;border-radius:11px;background:var(--s3);cursor:pointer;position:relative;transition:all .2s;border:1px solid var(--bd);flex-shrink:0;}
+.toggle{width:17px;height:17px;border-radius:50%;position:absolute;top:1px;right:1px;transition:all .3s;}
+.toggle-wrap.off .toggle{right:auto;left:1px;background:var(--mu)!important;}
+
+/* MAP OVERLAYS */
+.map-legend{position:absolute;top:12px;left:12px;z-index:999;background:rgba(13,17,32,.88);border:1px solid var(--bd);border-radius:12px;padding:10px 14px;backdrop-filter:blur(10px);}
+.leg-item{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;margin-bottom:5px;}
+.leg-item:last-child{margin-bottom:0;}
+.leg-dot{width:9px;height:9px;border-radius:50%;}
+.map-btns{position:absolute;top:12px;left:12px;z-index:999;display:flex;flex-direction:column;gap:5px;}
+.map-btn{width:36px;height:36px;border-radius:10px;border:1px solid var(--bd);background:rgba(13,17,32,.88);color:var(--tx);font-size:16px;cursor:pointer;backdrop-filter:blur(8px);transition:all .2s;display:flex;align-items:center;justify-content:center;}
+.map-btn:hover{border-color:var(--green);transform:scale(1.08);}
+.map-btn.active{border-color:var(--blue);background:rgba(77,159,255,.15);}
+
+/* LOADING */
+.loading-overlay{position:absolute;inset:0;background:rgba(7,9,15,.88);z-index:500;display:none;align-items:center;justify-content:center;flex-direction:column;gap:14px;backdrop-filter:blur(4px);}
+.loading-overlay.show{display:flex;}
+.drone-anim{animation:fly 1.5s ease-in-out infinite;}
+@keyframes fly{0%,100%{transform:translateY(0) rotate(0deg);}50%{transform:translateY(-10px) rotate(4deg);}}
+.loading-bar{width:180px;height:4px;background:var(--s3);border-radius:4px;overflow:hidden;}
+.loading-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--blue));border-radius:4px;animation:load 2s ease-in-out infinite;}
+@keyframes load{0%{width:0%}100%{width:100%}}
+.loading-txt{font-size:13px;font-weight:700;color:var(--green);}
+.loading-sub{font-size:11px;color:var(--mu);}
+
+/* MODAL */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px);}
+.modal-bg.show{display:flex;animation:fadeIn .2s ease;}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.modal{background:var(--s1);border:1px solid var(--bd);border-radius:20px;padding:24px 20px;width:100%;max-width:400px;box-shadow:0 24px 60px rgba(0,0,0,.5);}
+.modal-icon{font-size:36px;text-align:center;display:block;margin-bottom:10px;}
+.modal-title{font-size:18px;font-weight:900;text-align:center;margin-bottom:4px;}
+.modal-sub{font-size:12px;color:var(--mu);text-align:center;margin-bottom:16px;line-height:1.6;}
+.modal-input{width:100%;background:var(--s2);border:1.5px solid var(--bd);border-radius:10px;padding:10px 13px;color:var(--tx);font-family:'Tajawal',sans-serif;font-size:13px;outline:none;margin-bottom:10px;transition:border-color .2s;}
+.modal-input:focus{border-color:var(--green);}
+.modal-input::placeholder{color:var(--mu);}
+.modal-btns{display:flex;gap:8px;}
+.modal-btn{flex:1;padding:11px;border-radius:10px;font-family:'Tajawal',sans-serif;font-weight:800;font-size:14px;cursor:pointer;border:none;transition:all .2s;}
+.modal-btn.cancel{background:var(--s2);border:1px solid var(--bd);color:var(--mu);}
+.modal-btn.cancel:hover{color:var(--tx);}
+.modal-btn.save{background:linear-gradient(135deg,var(--green),#00b377);color:#060b14;}
+.modal-btn.save:hover{transform:translateY(-1px);box-shadow:0 5px 18px rgba(0,229,160,.3);}
+
+/* VIDEO */
+.video-preview{background:var(--s2);border:1px solid var(--bd);border-radius:12px;overflow:hidden;}
+.preview-header{padding:9px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--bd);}
+.preview-title{font-size:12px;font-weight:800;}
+.preview-clear{background:none;border:none;color:var(--mu);cursor:pointer;font-size:14px;transition:all .2s;}
+.preview-clear:hover{color:var(--red);}
+
+/* THEME */
+html,body,.header,.sidebar,.panel,.set-card,.loc-box,.modal,
+.upload-zone,.hstat,.tab,.pt-item,.hist-card,.rb-spot,.modal-bg{
+  transition:background .25s,border-color .25s,color .25s;}
+
+/* TOAST */
+.toast{position:fixed;top:70px;left:50%;transform:translateX(-50%);background:var(--s1);border:1px solid var(--bd);border-radius:11px;padding:8px 18px;font-size:12px;font-weight:700;z-index:9999;animation:toastIn .3s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;box-shadow:0 8px 24px rgba(0,0,0,.3);}
+.toast.ok{border-color:rgba(0,229,160,.4);color:var(--green);}
+.toast.err{border-color:rgba(255,61,90,.4);color:var(--red);}
+@keyframes toastIn{from{opacity:0;transform:translateX(-50%) translateY(-10px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+
+/* ANIMATIONS */
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+@keyframes popIn{from{opacity:0;transform:scale(0)}to{opacity:1;transform:scale(1)}}
+@keyframes floatBox{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+
+/* EMPTY */
+.empty{text-align:center;padding:24px 10px;color:var(--mu);}
+.empty-icon{font-size:32px;display:block;margin-bottom:8px;opacity:.4;}
+.empty-txt{font-size:12px;font-weight:700;}
+.empty-sub{font-size:10px;margin-top:3px;}
+
+/* LOCATE */
+.locate-btn{width:100%;padding:11px;background:linear-gradient(135deg,var(--blue),#2563eb);border:none;border-radius:11px;color:#fff;font-family:'Tajawal',sans-serif;font-weight:800;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 16px rgba(77,159,255,.25);transition:all .2s;}
+.locate-btn:hover{transform:translateY(-1px);box-shadow:0 6px 20px rgba(77,159,255,.4);}
+.located-card{background:rgba(77,159,255,.08);border:1px solid rgba(77,159,255,.25);border-radius:10px;padding:9px 12px;}
+.gps-card{background:var(--s3);border:1px solid var(--bd);border-radius:10px;padding:9px 12px;display:flex;align-items:center;gap:8px;}
+
+/* REPORT */
+.report-section{display:none;margin-top:8px;}
+.report-item{background:var(--s3);border:1px solid var(--bd);border-radius:11px;padding:10px;margin-bottom:7px;}
+.report-item-name{font-size:12px;font-weight:800;margin-bottom:4px;}
+.report-item-desc{font-size:10px;color:var(--mu);margin-bottom:5px;}
+.report-item-coords{font-size:10px;color:var(--mu);margin-bottom:6px;}
+.report-item-btns{display:flex;gap:5px;}
+
+/* STATUS BADGE */
+.status-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;}
+.status-badge.ok{background:rgba(0,229,160,.15);color:var(--green);}
+.status-badge.err{background:rgba(255,61,90,.15);color:var(--red);}
+.status-badge.loading{background:rgba(77,159,255,.15);color:var(--blue);}
+
+/* LIGHT MODE EXTRAS */
+body.light .map-btn{background:rgba(255,255,255,.9);}
+body.light .loading-overlay{background:rgba(240,244,248,.9);}
+</style>
+</head>
+<body>
+
+<div class="app">
+
+<!-- ═══════════ HEADER ═══════════ -->
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon"><svg width="26" height="26" viewBox="0 0 64 64" fill="none"><rect x="20" y="24" width="24" height="14" rx="5" fill="#fff" opacity=".95"/><circle cx="32" cy="40" r="5" fill="#00e5a0"/><circle cx="32" cy="40" r="2.5" fill="#060b14"/><line x1="20" y1="28" x2="5" y2="18" stroke="#fff" stroke-width="3" stroke-linecap="round"/><line x1="44" y1="28" x2="59" y2="18" stroke="#fff" stroke-width="3" stroke-linecap="round"/><line x1="20" y1="34" x2="5" y2="44" stroke="#fff" stroke-width="3" stroke-linecap="round"/><line x1="44" y1="34" x2="59" y2="44" stroke="#fff" stroke-width="3" stroke-linecap="round"/><ellipse cx="5" cy="18" rx="8" ry="3" fill="#00e5a0" opacity=".9"/><ellipse cx="59" cy="18" rx="8" ry="3" fill="#00e5a0" opacity=".9"/><ellipse cx="5" cy="44" rx="8" ry="3" fill="#00e5a0" opacity=".9"/><ellipse cx="59" cy="44" rx="8" ry="3" fill="#00e5a0" opacity=".9"/><circle cx="32" cy="27" r="2.5" fill="#ffd166"/></svg></div>
+    <div>
+      <div class="logo-text">كشف <span>المهملات</span> بالذكاء الاصطناعي</div>
+      <div class="logo-sub">DRONE TRASH DETECTION SYSTEM</div>
+    </div>
+  </div>
+  <div class="hstats">
+    <div class="hstat">
+      <div class="hdot" style="background:var(--blue)"></div>
+      صور محللة: <strong id="hImages">0</strong>
+    </div>
+    <div class="hstat">
+      <div class="hdot" style="background:var(--red)"></div>
+      نقاط المهملات: <strong id="hTrash">0</strong>
+    </div>
+    <button class="theme-toggle" id="themeToggleBtn" onclick="toggleTheme()" title="تبديل المظهر">🌙</button>
+  </div>
+</div>
+
+<!-- ═══════════ BODY ═══════════ -->
+
+<!-- ═══ MAP (left) ═══ -->
+<div class="map-wrap" style="flex:1;position:relative;overflow:hidden;">
+  <div id="map"></div>
+
+  <!-- Legend — bottom left -->
+  <div class="map-legend" style="top:auto;bottom:12px;left:12px;">
+    <div class="leg-item"><div class="leg-dot" style="background:var(--red)"></div>مهملات مكتشفة</div>
+    <div class="leg-item"><div class="leg-dot" style="background:rgba(255,61,90,.3);border:1px dashed var(--red);border-radius:50%;"></div>منطقة خطر</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--blue)"></div>موقع الدرون</div>
+    <div class="leg-item"><div class="leg-dot" style="background:var(--yellow)"></div>اشتباه بوجود مهملات</div>
+  </div>
+
+  <!-- Map buttons — on LEFT side away from sidebar -->
+  <div class="map-btns" style="right:auto;left:12px;">
+    <button class="map-btn" onclick="setMapType('dark')" title="داكن">🌑</button>
+    <button class="map-btn" onclick="setMapType('light')" title="نهاري">☀️</button>
+    <button class="map-btn" onclick="setMapType('satellite')" title="قمر صناعي">🛰️</button>
+    <button class="map-btn" style="background:rgba(66,133,244,.15);border-color:rgba(66,133,244,.4);color:#4285f4;" onclick="openGoogleMapsRoute()" title="مسار Google Maps">🗺️</button>
+    <button class="map-btn" onclick="switchTab('settings')" title="إعدادات">⚙️</button>
+  </div>
+
+  <!-- Loading -->
+  <div class="loading-overlay" id="loadingWrap">
+    <div class="drone-anim"><svg width="52" height="52" viewBox="0 0 64 64" fill="none"><rect x="20" y="24" width="24" height="14" rx="5" fill="#00e5a0" opacity=".9"/><circle cx="32" cy="40" r="5" fill="#fff"/><circle cx="32" cy="40" r="2.5" fill="#060b14"/><line x1="20" y1="28" x2="5" y2="18" stroke="#00e5a0" stroke-width="3" stroke-linecap="round"/><line x1="44" y1="28" x2="59" y2="18" stroke="#00e5a0" stroke-width="3" stroke-linecap="round"/><line x1="20" y1="34" x2="5" y2="44" stroke="#00e5a0" stroke-width="3" stroke-linecap="round"/><line x1="44" y1="34" x2="59" y2="44" stroke="#00e5a0" stroke-width="3" stroke-linecap="round"/><ellipse cx="5" cy="18" rx="8" ry="3" fill="#fff" opacity=".85"/><ellipse cx="59" cy="18" rx="8" ry="3" fill="#fff" opacity=".85"/><ellipse cx="5" cy="44" rx="8" ry="3" fill="#fff" opacity=".85"/><ellipse cx="59" cy="44" rx="8" ry="3" fill="#fff" opacity=".85"/><circle cx="32" cy="27" r="2.5" fill="#ffd166"/></svg></div>
+    <div class="loading-bar"><div class="loading-fill"></div></div>
+    <div class="loading-txt">جاري تحليل صورة الدرون...</div>
+    <div class="loading-sub" id="loadingSub">الذكاء الاصطناعي يفحص الصورة</div>
+  </div>
+</div><!-- end map-wrap -->
+
+<!-- ═══ SIDEBAR (right) ═══ -->
+<div class="sidebar">
+
+  <!-- API Banner -->
+  <div class="api-banner" id="apiBanner">
+    <div class="api-dot"></div>
+    <div class="api-text" id="apiText">Gemini AI غير مفعّل — أضف الـ API Key</div>
+    <button class="api-set-btn" onclick="openApiModal()">إعداد ←</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('upload')">📤 رفع</div>
+    <div class="tab" onclick="switchTab('history')">📋 السجل</div>
+    <div class="tab" onclick="switchTab('points')">📍 النقاط</div>
+    <div class="tab" onclick="switchTab('settings')">⚙️ إعدادات</div>
+  </div>
+
+  <!-- ── UPLOAD PANEL ── -->
+  <div class="panel active" id="panel-upload">
+
+    <!-- Mode tabs -->
+    <div class="mode-tabs">
+      <button class="mode-tab active" id="modeImg" onclick="switchMode('image')">📸 صورة</button>
+      <button class="mode-tab" id="modeVid" onclick="switchMode('video')">🎬 فيديو</button>
+    </div>
+
+    <!-- IMAGE section -->
+    <div id="imageUploadSection">
+      <div class="upload-zone" id="uploadZone"
+        onclick="document.getElementById('droneFileInput').click()"
+        ondragover="handleDrag(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+        <div style="display:flex;justify-content:center;color:var(--mu);"><svg width="64" height="64" viewBox="0 0 64 64" fill="none"><rect x="20" y="24" width="24" height="14" rx="5" fill="currentColor" opacity=".9"/><circle cx="32" cy="40" r="5" fill="#00e5a0"/><circle cx="32" cy="40" r="2.5" fill="#060b14"/><line x1="20" y1="28" x2="5" y2="18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="44" y1="28" x2="59" y2="18" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="20" y1="34" x2="5" y2="44" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><line x1="44" y1="34" x2="59" y2="44" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><ellipse cx="5" cy="18" rx="8" ry="3" fill="#00e5a0" opacity=".85"/><ellipse cx="59" cy="18" rx="8" ry="3" fill="#00e5a0" opacity=".85"/><ellipse cx="5" cy="44" rx="8" ry="3" fill="#00e5a0" opacity=".85"/><ellipse cx="59" cy="44" rx="8" ry="3" fill="#00e5a0" opacity=".85"/><circle cx="32" cy="27" r="2.5" fill="#ffd166"/></svg></div>
+        <div class="uz-title">ارفع صور الدرون</div>
+        <div class="uz-sub">اسحب وأفلت أو اضغط للاختيار<br>يمكن اختيار أكثر من صورة</div>
+        <div class="uz-formats">
+          <span class="uz-fmt">JPG</span><span class="uz-fmt">PNG</span>
+          <span class="uz-fmt">WEBP</span><span class="uz-fmt">HEIC</span>
+        </div>
+      </div>
+      <input type="file" id="droneFileInput" accept="image/*" multiple style="display:none" onchange="handleFileSelect(event)">
+
+      <!-- File Queue -->
+      <div id="fileQueue" style="display:none;">
+        <div class="queue-header">
+          <div class="queue-title">📁 الملفات (<span id="queueCount">0</span>)</div>
+          <div class="queue-btns">
+            <button onclick="document.getElementById('droneFileInput').click()"
+              style="background:var(--gg);border:1px solid rgba(0,229,160,.3);border-radius:7px;padding:4px 9px;font-family:'Tajawal',sans-serif;font-size:10px;font-weight:700;color:var(--green);cursor:pointer;">+ إضافة</button>
+            <button onclick="clearAllFiles()"
+              style="background:var(--rg);border:1px solid rgba(255,61,90,.3);border-radius:7px;padding:4px 9px;font-family:'Tajawal',sans-serif;font-size:10px;font-weight:700;color:var(--red);cursor:pointer;">مسح</button>
+          </div>
+        </div>
+        <div class="file-cards" id="fileCards"></div>
+      </div>
+
+      <!-- Batch progress -->
+      <div class="batch-prog" id="batchProgress" style="display:none;">
+        <div class="bp-header">
+          <span class="bp-label" id="bpLabel">جاري التحليل...</span>
+          <span class="bp-pct" id="bpPercent">0%</span>
+        </div>
+        <div class="prog-track"><div class="prog-fill" id="bpFill"></div></div>
+        <div class="bp-sub" id="bpSub"></div>
+      </div>
+    </div>
+
+    <!-- VIDEO section -->
+    <div id="videoUploadSection" style="display:none;">
+      <div class="upload-zone" id="videoZone"
+        onclick="document.getElementById('droneVideoInput').click()"
+        ondragover="handleDrag(event)" ondragleave="handleDragLeave(event)" ondrop="handleVideoDrop(event)">
+        <div style="font-size:44px;margin-bottom:8px;">🎬</div>
+        <div class="uz-title">ارفع مقطع الدرون</div>
+        <div class="uz-sub">اسحب وأفلت أو اضغط</div>
+        <div class="uz-formats">
+          <span class="uz-fmt">MP4</span><span class="uz-fmt">MOV</span>
+          <span class="uz-fmt">AVI</span><span class="uz-fmt">MKV</span>
+        </div>
+      </div>
+      <input type="file" id="droneVideoInput" accept="video/*" multiple style="display:none" onchange="handleVideoSelect(event)">
+
+      <div class="video-preview" id="videoPreview" style="display:none;">
+        <div class="preview-header">
+          <span class="preview-title">🎬 معاينة الفيديو</span>
+          <button class="preview-clear" onclick="clearVideo()">✕</button>
+        </div>
+        <video id="previewVideo" style="width:100%;max-height:170px;display:block;background:#000;" controls muted></video>
+        <div style="padding:8px 12px;font-size:10px;color:var(--mu);" id="videoMeta"></div>
+      </div>
+
+      <div class="loc-box" id="videoSettings" style="display:none;">
+        <div class="loc-title">⚙️ إعدادات التحليل</div>
+        <div class="setting-row" style="margin-top:0;">
+          <div><div class="setting-lbl">تحليل كل</div><div class="setting-hint">ثواني بين كل فريم</div></div>
+          <div class="s-ctrl">
+            <button class="s-btn" onclick="chgVideoInterval(-1)">−</button>
+            <span class="s-val" id="videoIntervalVal">15</span>
+            <button class="s-btn" onclick="chgVideoInterval(1)">+</button>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--mu);margin-top:6px;">الفريمات: <strong style="color:var(--green);" id="expectedFrames">—</strong></div>
+          <div style="font-size:10px;color:var(--yellow);margin-top:5px;padding:5px 8px;background:rgba(255,209,102,.06);border-radius:7px;">
+            💡 كلما زادت الثواني، قلّت الطلبات وتجنبت تجاوز حد API
+          </div>
+
+        <div id="videoProgress" style="display:none;margin-top:10px;">
+          <div class="bp-header">
+            <span class="bp-label" id="vpLabel">جاري التحليل...</span>
+            <span class="bp-pct" id="vpPercent">0%</span>
+          </div>
+          <div class="prog-track"><div class="prog-fill" id="vpFill"></div></div>
+          <div class="bp-sub" id="vpSub"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GPS Card -->
+    <div class="loc-box" id="gpsCard">
+      <div class="loc-title">📡 موقع الدرون</div>
+      <button class="locate-btn" onclick="locateMe()">
+        <span id="locateIcon">📍</span><span id="locateText">اكتشف موقعي الحالي</span>
+      </button>
+      <div id="locatedDisplay" style="display:none;margin-top:8px;" class="located-card">
+        <div style="font-size:10px;color:var(--blue);font-weight:700;margin-bottom:5px;">📍 موقعك الحالي</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+          <div style="background:var(--s2);border-radius:7px;padding:5px 8px;">
+            <div style="font-size:9px;color:var(--mu);font-weight:700;">خط العرض</div>
+            <div style="font-size:12px;font-weight:900;" id="locLat">—</div>
+          </div>
+          <div style="background:var(--s2);border-radius:7px;padding:5px 8px;">
+            <div style="font-size:9px;color:var(--mu);font-weight:700;">خط الطول</div>
+            <div style="font-size:12px;font-weight:900;" id="locLng">—</div>
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--mu);margin-top:4px;" id="locAccuracy"></div>
+      </div>
+      <div id="gpsStatus" class="gps-card" style="margin-top:8px;">
+        <span style="font-size:18px;">🖼️</span>
+        <div style="flex:1;">
+          <div style="font-size:11px;font-weight:800;color:var(--mu);">GPS من الصورة</div>
+          <div style="font-size:10px;color:var(--mu);">سيُقرأ تلقائياً عند رفع الصورة</div>
+        </div>
+      </div>
+      <div id="coordsDisplay" style="display:none;background:var(--gg);border:1px solid rgba(0,229,160,.25);border-radius:10px;padding:9px 12px;margin-top:8px;">
+        <div style="font-size:10px;color:var(--green);font-weight:700;margin-bottom:5px;">✅ GPS من الصورة</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+          <div style="background:var(--s2);border-radius:7px;padding:5px 8px;"><div style="font-size:9px;color:var(--mu);font-weight:700;">خط العرض</div><div style="font-size:12px;font-weight:900;" id="dispLat">—</div></div>
+          <div style="background:var(--s2);border-radius:7px;padding:5px 8px;"><div style="font-size:9px;color:var(--mu);font-weight:700;">خط الطول</div><div style="font-size:12px;font-weight:900;" id="dispLng">—</div></div>
+        </div>
+        <div style="font-size:10px;color:var(--mu);margin-top:4px;" id="dispDate">—</div>
+      </div>
+      <!-- Manual GPS toggle — always available -->
+      <div style="margin-top:10px;">
+        <button onclick="toggleManualGPS(this)" id="manualGpsToggle"
+          style="width:100%;background:var(--s3);border:1.5px solid var(--bd);border-radius:10px;
+          padding:9px 12px;font-family:'Tajawal',sans-serif;font-size:11px;font-weight:700;
+          color:var(--mu);cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+          transition:all .2s;" onmouseover="this.style.borderColor='var(--blue)';this.style.color='var(--blue)'"
+          onmouseout="this.style.borderColor='var(--bd)';this.style.color='var(--mu)'">
+          <span>✏️ إدخال GPS يدوياً</span>
+          <span id="manualGpsArrow" style="font-size:10px;transition:transform .2s;">▼</span>
+        </button>
+        <div id="manualGpsPanel" style="display:none;margin-top:8px;background:var(--s2);
+          border:1px solid var(--bd);border-radius:12px;padding:12px;gap:7px;flex-direction:column;">
+          <div style="font-size:10px;color:var(--mu);line-height:1.5;padding:6px 8px;background:rgba(255,209,102,.06);border:1px solid rgba(255,209,102,.15);border-radius:8px;">
+            💡 مفيد للفيديو أو الصور التي لا تحتوي على GPS تلقائي
+          </div>
+          <div class="loc-row" style="margin-bottom:0;">
+            <input class="loc-input" id="droneLat" placeholder="خط العرض (24.7136)" type="text" inputmode="decimal" oninput="updateManualPreview()">
+            <input class="loc-input" id="droneLng" placeholder="خط الطول (46.6753)" type="text" inputmode="decimal" oninput="updateManualPreview()">
+          </div>
+          <input class="loc-input" id="droneArea" placeholder="اسم المنطقة (اختياري)" style="width:100%;margin-top:7px;">
+          <div id="manualPreview" style="display:none;margin-top:7px;background:var(--gg);
+            border:1px solid rgba(0,229,160,.25);border-radius:9px;padding:8px 11px;
+            display:flex;align-items:center;gap:8px;">
+            <span style="font-size:14px;">📍</span>
+            <span id="manualPreviewText" style="font-size:11px;font-weight:700;color:var(--green);flex:1;">—</span>
+            <button onclick="flyToManual()"
+              style="background:rgba(0,229,160,.15);border:1px solid rgba(0,229,160,.3);border-radius:7px;
+              padding:4px 10px;font-family:'Tajawal',sans-serif;font-size:10px;font-weight:700;
+              color:var(--green);cursor:pointer;">انتقل ↗</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- kept for compatibility -->
+      <div id="noGpsFallback" style="display:none;"></div>
+      <div id="areaRow" style="display:none;">
+        <input class="loc-input" id="droneAreaAuto" placeholder="اسم المنطقة (اختياري)" style="width:100%;margin-top:7px;">
+      </div>
+
+      <div class="loc-hint" style="margin-top:8px;"><div class="loc-hint-dot"></div><span>DJI وغيرها تحفظ GPS تلقائياً في الصورة</span></div>
+    </div>
+
+    <!-- Analyze Button — ONE unified button -->
+    <div class="analyze-wrap">
+      <button class="analyze-btn primary" id="analyzeBtn" onclick="analyzeUnified()" disabled style="flex:1;font-size:15px;">
+        🤖 تحليل AI
+      </button>
+    </div>
+
+    <!-- Result Box -->
+    <div class="result-box" id="resultBox" style="display:none;">
+      <div class="rb-header">
+        <div class="rb-title">🔍 نتائج التحليل</div>
+        <div class="rb-badge" id="rbBadge"></div>
+      </div>
+      <div class="rb-body">
+        <div class="rb-desc" id="rbDesc"></div>
+        <div class="rb-tags" id="rbTags"></div>
+        <div style="font-size:10px;font-weight:700;color:var(--mu);letter-spacing:1px;margin-bottom:7px;">مواقع المهملات</div>
+        <div class="rb-spots" id="rbSpots"></div>
+        <button class="rb-add-all" id="rbAddAll" onclick="addAllToMap()">🗺️ إضافة الكل للخريطة</button>
+        <div class="report-section" id="reportSection"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── HISTORY PANEL ── -->
+  <div class="panel" id="panel-history">
+    <div id="historyList">
+      <div class="empty"><span class="empty-icon">📂</span><div class="empty-txt">لا توجد صور محللة بعد</div><div class="empty-sub">ارفع صورة من الدرون وحللها</div></div>
+    </div>
+  </div>
+
+  <!-- ── POINTS PANEL ── -->
+  <div class="panel" id="panel-points">
+    <div class="slbl">نقاط المهملات (<span id="ptCount">0</span>)</div>
+    <div id="pointsList">
+      <div class="empty"><span class="empty-icon">📍</span><div class="empty-txt">لا توجد نقاط بعد</div><div class="empty-sub">حلل صورة لإضافة نقاط تلقائياً</div></div>
+    </div>
+    <div class="route-btns">
+      <button class="route-btn-g" onclick="openGoogleMapsRoute()">🗺️ مسار Google Maps</button>
+      <button class="route-btn-d" onclick="drawRouteOnMap()">📐 رسم</button>
+    </div>
+    <button class="clear-btn" onclick="clearAllPoints()">🗑️ مسح كل النقاط</button>
+  </div>
+
+  <!-- ── SETTINGS PANEL ── -->
+  <div class="panel" id="panel-settings">
+
+    <!-- Theme -->
+    <div class="set-card">
+      <div class="set-card-title">🎨 المظهر</div>
+      <div class="map-type-grid" style="grid-template-columns:1fr 1fr;margin-bottom:0;">
+        <button class="mtype-btn active" id="theme-dark" onclick="setTheme('dark')">🌙 ليلي</button>
+        <button class="mtype-btn" id="theme-light" onclick="setTheme('light')">☀️ نهاري</button>
+      </div>
+    </div>
+
+    <!-- Google Maps Key -->
+    <div class="set-card">
+      <div class="set-card-title">🗺️ Google Maps API Key</div>
+      <div class="set-card-sub">لاستخدام خرائط Google الاحترافية</div>
+      <div style="display:flex;gap:6px;margin-bottom:7px;">
+        <input id="gmapsKeyInput" type="password" class="loc-input" placeholder="AIzaSy...">
+        <button class="set-apply-btn" onclick="applyGoogleMapsFromSettings()">تطبيق</button>
+      </div>
+      <div style="display:flex;gap:5px;">
+        <button class="set-mini-btn" onclick="toggleVis('gmapsKeyInput')" style="width:auto;padding:5px 10px;">👁 إظهار</button>
+        <button class="set-mini-btn red" onclick="removeGoogleMaps()" style="width:auto;padding:5px 10px;">✕ إزالة</button>
+      </div>
+      <div id="gmapsStatus" style="display:none;margin-top:7px;font-size:11px;padding:6px 10px;border-radius:8px;font-weight:700;"></div>
+    </div>
+
+    <!-- Map Type -->
+    <div class="set-card">
+      <div class="set-card-title">🌍 نوع الخريطة</div>
+      <div class="map-type-grid">
+        <button class="mtype-btn active" id="mtype-dark" onclick="setMapType('dark')">🌑 داكن</button>
+        <button class="mtype-btn" id="mtype-light" onclick="setMapType('light')">☀️ فاتح</button>
+        <button class="mtype-btn" id="mtype-satellite" onclick="setMapType('satellite')">🛰️ قمر</button>
+        <button class="mtype-btn" id="mtype-roads" onclick="setMapType('roads')">🗺️ شوارع</button>
+        <button class="mtype-btn" id="mtype-terrain" onclick="setMapType('terrain')">🏔️ تضاريس</button>
+        <button class="mtype-btn" id="mtype-hybrid" onclick="setMapType('hybrid')">🌐 هجين</button>
+      </div>
+    </div>
+
+    <!-- AI Settings -->
+    <div class="set-card">
+      <div class="set-card-title">✨ إعدادات Gemini AI</div>
+      <div class="setting-row">
+        <div><div class="setting-lbl">حساسية الكشف</div><div class="setting-hint">كلما زادت اكتشف أكثر</div></div>
+        <div class="s-ctrl">
+          <button class="s-btn" onclick="chgSetting('sensitivity',-1)">−</button>
+          <span class="s-val" id="sensitivityVal">متوسط</span>
+          <button class="s-btn" onclick="chgSetting('sensitivity',1)">+</button>
+        </div>
+      </div>
+      <div class="setting-row" style="border-bottom:none;">
+        <div><div class="setting-lbl">دوائر التغطية</div><div class="setting-hint">تظهر حول كل نقطة</div></div>
+        <div class="toggle-wrap" onclick="toggleSetting('showCircles')" id="tw-showCircles">
+          <div class="toggle" id="toggle-showCircles" style="background:var(--green);right:1px;"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export -->
+    <div class="set-card">
+      <div class="set-card-title">📥 تصدير</div>
+      <div style="display:flex;flex-direction:column;gap:6px;">
+        <button onclick="openGoogleMapsRoute()"
+          style="width:100%;padding:11px;background:linear-gradient(135deg,#4285f4,#1a73e8);border:none;border-radius:10px;color:#fff;font-family:'Tajawal',sans-serif;font-weight:800;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px;">
+          🗺️ فتح المسار في Google Maps
+        </button>
+        <div style="display:flex;gap:6px;">
+          <button class="set-apply-btn" style="flex:1;background:linear-gradient(135deg,var(--blue),#2563eb);" onclick="exportCSV()">📄 CSV</button>
+          <button class="set-apply-btn" style="flex:1;background:linear-gradient(135deg,var(--yellow),#e89a1a);color:#060b14;" onclick="exportGeoJSON()">🗺️ GeoJSON</button>
+          <button class="set-apply-btn" style="flex:1;background:linear-gradient(135deg,#a855f7,#7c3aed);" onclick="exportReport()">📊 تقرير</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Danger -->
+    <div class="set-card" style="border-color:rgba(255,61,90,.2);">
+      <div class="set-card-title">⚙️ التهيئة</div>
+      <div style="display:flex;flex-direction:column;gap:5px;margin-top:6px;">
+        <button class="set-mini-btn red" onclick="clearAllPoints()">🗑️ مسح كل النقاط</button>
+        <button class="set-mini-btn red" onclick="clearHistory()">📂 مسح السجل</button>
+        <button class="set-mini-btn red" onclick="resetAll()">🔄 إعادة تعيين الكل</button>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- end sidebar -->
+
+
+</div><!-- end app -->
+
+<!-- Modal -->
+<!-- API KEYS MODAL -->
+<div class="modal-bg" id="apiModal">
+  <div class="modal" style="max-width:420px;">
+    <span class="modal-icon">🔑</span>
+    <div class="modal-title">إعداد مفاتيح API</div>
+    <div class="modal-sub">أدخل مفتاحي Gemini وGoogle Maps لتفعيل النظام كاملاً</div>
+
+    <!-- Gemini Key -->
+    <div style="background:var(--s2);border:1px solid var(--bd);border-radius:12px;padding:13px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <span style="font-size:20px;">✨</span>
+        <div>
+          <div style="font-size:12px;font-weight:800;">Gemini AI — لتحليل الصور</div>
+          <div style="font-size:10px;color:var(--mu);">من <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--blue)">aistudio.google.com</a> — مجاناً</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <input class="modal-input" id="geminiKeyInput" type="password" placeholder="AIzaSy... (Gemini)" style="margin:0;flex:1;">
+        <button onclick="toggleVis('geminiKeyInput')" style="background:var(--s3);border:1px solid var(--bd);border-radius:8px;padding:0 10px;color:var(--mu);cursor:pointer;font-size:13px;">👁</button>
+      </div>
+      <div id="geminiStatus" style="display:none;margin-top:6px;font-size:10px;padding:5px 8px;border-radius:6px;font-weight:700;"></div>
+    </div>
+
+    <!-- Google Maps Key -->
+    <div style="background:var(--s2);border:1px solid var(--bd);border-radius:12px;padding:13px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+        <span style="font-size:20px;">🗺️</span>
+        <div>
+          <div style="font-size:12px;font-weight:800;">Google Maps — لعرض الخريطة</div>
+          <div style="font-size:10px;color:var(--mu);">من <a href="https://console.cloud.google.com" target="_blank" style="color:var(--blue)">console.cloud.google.com</a></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;">
+        <input class="modal-input" id="gmapsKeyInputModal" type="password" placeholder="AIzaSy... (Maps)" style="margin:0;flex:1;">
+        <button onclick="toggleVis('gmapsKeyInputModal')" style="background:var(--s3);border:1px solid var(--bd);border-radius:8px;padding:0 10px;color:var(--mu);cursor:pointer;font-size:13px;">👁</button>
+      </div>
+      <div id="gmapsModalStatus" style="display:none;margin-top:6px;font-size:10px;padding:5px 8px;border-radius:6px;font-weight:700;"></div>
+    </div>
+
+    <div style="font-size:10px;color:var(--mu);margin-bottom:12px;line-height:1.5;text-align:center;">
+      🔒 المفاتيح تُحفظ في متصفحك فقط ولا تُرسل لأي خادم خارجي
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn cancel" onclick="closeApiModal()">إلغاء</button>
+      <button class="modal-btn save" onclick="saveApiKeys()">💾 حفظ وتفعيل</button>
+    </div>
+  </div>
+</div>
+
+<script>
+
+/* ── STATE ── */
+let geminiKey = localStorage.getItem('gemini_api_key') || '';
+let gmapsKey  = localStorage.getItem('gmaps_api_key')  || '';
+let trashPoints = [];
+let droneMarkers = [];
+let zoneCircles = [];
+let analysisHistory = [];
+let currentFile = null;
+let currentFileData = null;
+
+/* ── MAP ── */
+let currentTile = null;
+let currentMapType = 'dark';
+let aiSettings = {
+  sensitivity: 1, // 0=low,1=med,2=high
+  maxPoints: 5,
+  showCircles: true
+};
+const sensLabels = ['منخفض','متوسط','عالٍ'];
+
+const map = L.map('map', { zoomControl: false }).setView([24.7136, 46.6753], 12);
+setTimeout(()=>map.invalidateSize(),300);
+L.control.zoom({ position: 'bottomleft' }).addTo(map);
+
+function getTileConfig(type) {
+  switch(type) {
+    case 'dark':      return { url:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', attr:'© CARTO', sub:'abcd' };
+    case 'light':     return { url:'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', attr:'© CARTO', sub:'abcd' };
+    case 'satellite': return gmapsKey
+      ? { url:`https://mt{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}&key=${gmapsKey}`, attr:'© Google', sub:'0123' }
+      : { url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr:'© Esri', sub:'abcd' };
+    case 'roads':     return gmapsKey
+      ? { url:`https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}&key=${gmapsKey}`, attr:'© Google', sub:'0123' }
+      : { url:'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attr:'© OSM', sub:'abc' };
+    case 'terrain':   return gmapsKey
+      ? { url:`https://mt{s}.google.com/vt/lyrs=p&x={x}&y={y}&z={z}&key=${gmapsKey}`, attr:'© Google', sub:'0123' }
+      : { url:'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', attr:'© OpenTopoMap', sub:'abc' };
+    case 'hybrid':    return gmapsKey
+      ? { url:`https://mt{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}&key=${gmapsKey}`, attr:'© Google', sub:'0123' }
+      : { url:'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr:'© Esri', sub:'abcd' };
+    default:          return { url:'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', attr:'© CARTO', sub:'abcd' };
+  }
+}
+
+function setMapType(type) {
+  if (currentTile) map.removeLayer(currentTile);
+  const cfg = getTileConfig(type);
+  currentTile = L.tileLayer(cfg.url, { attribution: cfg.attr, maxZoom: 21, subdomains: cfg.sub }).addTo(map);
+  currentMapType = type;
+  document.querySelectorAll('.mtype-btn').forEach(b => b.classList.remove('active'));
+  const btn = document.getElementById('mtype-'+type);
+  if (btn) btn.classList.add('active');
+}
+
+setMapType('dark');
+
+/* ── GOOGLE MAPS API ── */
+function applyGoogleMapsFromSettings() {
+  const k=document.getElementById('gmapsKeyInput').value.trim();
+  if(!k){showStatusBox('gmapsStatus','⚠️ أدخل الـ Key أولاً','warn');return;}
+  if(!k.startsWith('AIza')){showStatusBox('gmapsStatus','❌ Key يبدأ بـ AIza...','err');return;}
+  gmapsKey=k; localStorage.setItem('gmaps_api_key',k);
+  setMapType(currentMapType);
+  showStatusBox('gmapsStatus','✅ Google Maps مفعّل!','ok');
+  updateApiBanner(); showToast('✅ Google Maps مفعّل!','ok');
+}
+function applyGoogleMaps(){ applyGoogleMapsFromSettings(); }
+function removeGoogleMaps(){
+  gmapsKey=''; localStorage.removeItem('gmaps_api_key');
+  document.getElementById('gmapsKeyInput').value='';
+  setMapType('dark');
+  showStatusBox('gmapsStatus','تم الإزالة — الآن OpenStreetMap','warn');
+  updateApiBanner(); showToast('تم إزالة Google Maps Key','ok');
+}
+function toggleGmapsVis(){ toggleVis('gmapsKeyInput'); }
+function showGmapsStatus(msg,type){ showStatusBox('gmapsStatus',msg,type); }
+
+// Load saved keys in settings on open
+if(gmapsKey){ setTimeout(()=>{ const si=document.getElementById('gmapsKeyInput'); if(si)si.value=gmapsKey; showStatusBox('gmapsStatus','✅ Google Maps API Key محفوظ','ok'); },200); }
+
+/* ── AI SETTINGS ── */
+const sensLevels = ['منخفض','متوسط','عالٍ'];
+function chgSetting(key, d) {
+  if (key === 'sensitivity') {
+    aiSettings.sensitivity = Math.max(0, Math.min(2, aiSettings.sensitivity + d));
+    document.getElementById('sensitivityVal').textContent = sensLevels[aiSettings.sensitivity];
+  } else if (key === 'maxPoints') {
+    aiSettings.maxPoints = Math.max(1, Math.min(20, aiSettings.maxPoints + d));
+    document.getElementById('maxPointsVal').textContent = aiSettings.maxPoints;
+  }
+}
+function toggleSetting(key) {
+  aiSettings[key] = !aiSettings[key];
+  const tw = document.getElementById('toggle-'+key).parentElement;
+  const tg = document.getElementById('toggle-'+key);
+  if (aiSettings[key]) { tw.classList.remove('off'); tg.style.background='var(--green)'; }
+  else { tw.classList.add('off'); tg.style.background='var(--mu)'; }
+}
+
+/* ── EXPORT ── */
+function exportCSV() {
+  if (!trashPoints.length) { showToast('لا توجد نقاط للتصدير','err'); return; }
+  const rows = ['الاسم,خط العرض,خط الطول,الثقة,الوصف'];
+  trashPoints.forEach(p => rows.push(`"${p.name}",${p.lat},${p.lng},${p.confidence||''},"${p.description||''}"`));
+  dlFile('نقاط_المهملات.csv', rows.join('\n'), 'text/csv');
+  showToast('✅ تم التصدير CSV','ok');
+}
+function exportGeoJSON() {
+  if (!trashPoints.length) { showToast('لا توجد نقاط للتصدير','err'); return; }
+  const gj = { type:'FeatureCollection', features: trashPoints.map(p=>({
+    type:'Feature', geometry:{type:'Point',coordinates:[p.lng,p.lat]},
+    properties:{name:p.name,confidence:p.confidence,description:p.description}
+  }))};
+  dlFile('نقاط_المهملات.geojson', JSON.stringify(gj,null,2), 'application/json');
+  showToast('✅ تم التصدير GeoJSON','ok');
+}
+function exportReport() {
+  if (!trashPoints.length && !analysisHistory.length) { showToast('لا توجد بيانات للتقرير','err'); return; }
+  let txt = `تقرير نظام كشف المهملات بالذكاء الاصطناعي\n`;
+  txt += `تاريخ التقرير: ${new Date().toLocaleDateString('ar')}\n`;
+  txt += `إجمالي الصور المحللة: ${analysisHistory.length}\n`;
+  txt += `إجمالي نقاط المهملات: ${trashPoints.length}\n\n`;
+  txt += `=== نقاط المهملات ===\n`;
+  trashPoints.forEach((p,i) => {
+    txt += `${i+1}. ${p.name}\n   الموقع: ${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}\n   الثقة: ${p.confidence||'—'}\n   الوصف: ${p.description||'—'}\n\n`;
+  });
+  dlFile('تقرير_المهملات.txt', txt, 'text/plain');
+  showToast('✅ تم تصدير التقرير','ok');
+}
+function dlFile(name, content, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff'+content],{type}));
+  a.download = name; a.click();
+}
+function clearHistory() {
+  analysisHistory = [];
+  document.getElementById('hImages').textContent = 0;
+  document.getElementById('historyList').innerHTML = `<div class="empty"><span class="empty-icon">📂</span><div class="empty-txt">تم مسح السجل</div></div>`;
+  showToast('تم مسح السجل','ok');
+}
+function resetAll() {
+  clearAllPoints(); clearHistory();
+  showToast('تم إعادة تعيين الكل','ok');
+}
+
+/* ── ICONS ── */
+function makeIcon(color, emoji, size=36){
+  return L.divIcon({ className:'', iconSize:[size,size], iconAnchor:[size/2,size/2],
+    html:`<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};
+      border:2px solid rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;
+      font-size:${size*.42}px;box-shadow:0 3px 14px rgba(0,0,0,.5);">${emoji}</div>` });
+}
+
+function makeDroneIcon(size=44){
+  const s = size;
+  return L.divIcon({ className:'', iconSize:[s,s], iconAnchor:[s/2,s/2],
+    html:`<div style="width:${s}px;height:${s}px;display:flex;align-items:center;justify-content:center;
+      filter:drop-shadow(0 3px 8px rgba(0,0,0,.5));">
+      <svg width="${s}" height="${s}" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="20" y="24" width="24" height="14" rx="5" fill="#4d9fff" opacity="0.95"/>
+        <circle cx="32" cy="40" r="5" fill="#fff"/>
+        <circle cx="32" cy="40" r="2.5" fill="#1a2535"/>
+        <line x1="20" y1="28" x2="5" y2="18" stroke="#4d9fff" stroke-width="3" stroke-linecap="round"/>
+        <line x1="44" y1="28" x2="59" y2="18" stroke="#4d9fff" stroke-width="3" stroke-linecap="round"/>
+        <line x1="20" y1="34" x2="5" y2="44" stroke="#4d9fff" stroke-width="3" stroke-linecap="round"/>
+        <line x1="44" y1="34" x2="59" y2="44" stroke="#4d9fff" stroke-width="3" stroke-linecap="round"/>
+        <ellipse cx="5" cy="18" rx="8" ry="3" fill="#fff" opacity="0.9"/>
+        <ellipse cx="59" cy="18" rx="8" ry="3" fill="#fff" opacity="0.9"/>
+        <ellipse cx="5" cy="44" rx="8" ry="3" fill="#fff" opacity="0.9"/>
+        <ellipse cx="59" cy="44" rx="8" ry="3" fill="#fff" opacity="0.9"/>
+        <circle cx="32" cy="27" r="2.5" fill="#ffd166"/>
+      </svg>
+    </div>`});
+}
+
+const trashIcon = makeIcon('#ff3d5a','🗑️');
+const droneIcon = makeDroneIcon(44);
+const medIcon   = makeIcon('#ffd166','⚠️',34);
+
+/* ── THEME ── */
+let currentTheme = localStorage.getItem('theme') || 'dark';
+function setTheme(theme) {
+  currentTheme = theme;
+  localStorage.setItem('theme', theme);
+  if (theme === 'light') {
+    document.body.classList.add('light');
+    document.getElementById('themeToggleBtn').textContent = '🌙';
+    if(currentMapType==='dark') setMapType('light');
+  } else {
+    document.body.classList.remove('light');
+    document.getElementById('themeToggleBtn').textContent = '☀️';
+    if(currentMapType==='light') setMapType('dark');
+  }
+  const db=document.getElementById('theme-dark'), lb=document.getElementById('theme-light');
+  if(db) db.classList.toggle('active', theme==='dark');
+  if(lb) lb.classList.toggle('active', theme==='light');
+}
+function toggleTheme() { setTheme(currentTheme==='dark'?'light':'dark'); }
+
+/* ── API KEYS ── */
+function openApiModal(){
+  document.getElementById('geminiKeyInputModal') && (document.getElementById('geminiKeyInputModal').value = gmapsKey ? document.getElementById('gmapsKeyInput')?.value||'' : '');
+  document.getElementById('geminiKeyInput') && (document.getElementById('geminiKeyInput').value = geminiKey);
+  document.getElementById('gmapsKeyInputModal') && (document.getElementById('gmapsKeyInputModal').value = gmapsKey);
+  document.getElementById('apiModal').classList.add('show');
+}
+function closeApiModal(){ document.getElementById('apiModal').classList.remove('show'); }
+
+function toggleVis(id){ const el=document.getElementById(id); el.type=el.type==='password'?'text':'password'; }
+
+function saveApiKeys(){
+  const gk = document.getElementById('geminiKeyInput')?.value.trim();
+  const mk = document.getElementById('gmapsKeyInputModal')?.value.trim();
+
+  let saved = false;
+  if(gk){
+    if(!gk.startsWith('AIza')){ showStatusBox('geminiStatus','❌ Gemini Key يبدأ بـ AIza...','err'); return; }
+    geminiKey = gk; localStorage.setItem('gemini_api_key', gk);
+    showStatusBox('geminiStatus','✅ Gemini مفعّل','ok'); saved=true;
+  }
+  if(mk){
+    if(!mk.startsWith('AIza')){ showStatusBox('gmapsModalStatus','❌ Maps Key يبدأ بـ AIza...','err'); return; }
+    gmapsKey = mk; localStorage.setItem('gmaps_api_key', mk);
+    // Update maps key input in settings too
+    const si = document.getElementById('gmapsKeyInput'); if(si) si.value=mk;
+    setMapType(currentMapType);
+    showStatusBox('gmapsModalStatus','✅ Google Maps مفعّل','ok'); saved=true;
+  }
+  if(saved){ updateApiBanner(); setTimeout(closeApiModal, 1200); showToast('✅ تم حفظ المفاتيح','ok'); }
+}
+
+function showStatusBox(id, msg, type){
+  const el=document.getElementById(id); if(!el) return;
+  el.style.display='block'; el.textContent=msg;
+  const c={ok:['rgba(0,229,160,.1)','rgba(0,229,160,.3)','var(--green)'],
+           err:['rgba(255,61,90,.1)','rgba(255,61,90,.3)','var(--red)'],
+           warn:['rgba(255,209,102,.1)','rgba(255,209,102,.3)','var(--yellow)']};
+  const col=c[type]||c.warn;
+  el.style.background=col[0]; el.style.border=`1px solid ${col[1]}`; el.style.color=col[2];
+}
+
+function updateApiBanner(){
+  const b=document.getElementById('apiBanner'), t=document.getElementById('apiText');
+  if(geminiKey && gmapsKey){
+    b.classList.add('ok');
+    t.textContent='✅ Gemini AI + Google Maps مفعّلان';
+  } else if(geminiKey){
+    b.classList.add('ok');
+    t.textContent='✅ Gemini مفعّل — Google Maps غير مفعّل';
+  } else if(gmapsKey){
+    b.classList.remove('ok');
+    t.textContent='🗺️ Maps مفعّل — أضف Gemini Key للتحليل';
+  } else {
+    b.classList.remove('ok');
+    t.textContent='Gemini + Google Maps غير مفعّلَين — إعداد ←';
+  }
+}
+
+// Load saved keys on start
+if(geminiKey || gmapsKey) updateApiBanner();
+
+/* ── MULTI FILE QUEUE ── */
+let fileQueue = []; // [{file, dataUrl, gps, status:'pending'|'done'|'analyzing'}]
+let currentAnalyzeIdx = 0;
+
+function handleFileSelect(e){ addFilesToQueue(Array.from(e.target.files)); e.target.value=''; }
+function handleDrag(e){ e.preventDefault(); document.getElementById('uploadZone').classList.add('dragover'); }
+function handleDragLeave(){ document.getElementById('uploadZone').classList.remove('dragover'); }
+function handleDrop(e){
+  e.preventDefault(); document.getElementById('uploadZone').classList.remove('dragover');
+  const files = Array.from(e.dataTransfer.files).filter(f=>f.type.startsWith('image/'));
+  if(files.length) addFilesToQueue(files);
+}
+
+async function addFilesToQueue(files){
+  for(const file of files){
+    if(!file.type.startsWith('image/')) continue;
+    const id = Date.now() + Math.random();
+    const item = {id, file, dataUrl:null, gps:null, status:'pending'};
+    fileQueue.push(item);
+    renderFileCard(item);
+    // Read file
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      item.dataUrl = ev.target.result;
+      item.gps = await extractEXIF(file);
+      updateFileCard(item);
+    };
+    reader.readAsDataURL(file);
+  }
+  updateQueueUI();
+  showToast(`✅ أُضيف ${files.length} ملف`,'ok');
+}
+
+function renderFileCard(item){
+  const container = document.getElementById('fileCards');
+  const card = document.createElement('div');
+  card.id = `fc-${item.id}`;
+  card.style.cssText='background:var(--s2);border:1px solid var(--bd);border-radius:12px;overflow:hidden;';
+  card.innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;">
+      <div id="fct-${item.id}" style="width:48px;height:48px;background:var(--s3);border-radius:8px;
+        overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;">⏳</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:11px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:ltr;text-align:right;">${item.file.name}</div>
+        <div style="font-size:10px;color:var(--mu);margin-top:2px;">${(item.file.size/1024).toFixed(0)} KB</div>
+        <div id="fcg-${item.id}" style="font-size:10px;margin-top:2px;color:var(--mu);">📡 جاري قراءة GPS...</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;align-items:flex-end;flex-shrink:0;">
+        <div id="fcs-${item.id}" style="font-size:10px;font-weight:700;padding:2px 8px;background:var(--s3);
+          border-radius:10px;color:var(--mu);">انتظار</div>
+        <button onclick="removeFromQueue('${item.id}')"
+          style="background:none;border:none;color:var(--mu);cursor:pointer;font-size:13px;padding:2px;">✕</button>
+      </div>
+    </div>`;
+  container.appendChild(card);
+}
+
+function updateFileCard(item){
+  const thumb = document.getElementById(`fct-${item.id}`);
+  const gpsEl = document.getElementById(`fcg-${item.id}`);
+  if(thumb && item.dataUrl){
+    thumb.innerHTML=`<img src="${item.dataUrl}" style="width:48px;height:48px;object-fit:cover;cursor:pointer;border-radius:8px;"
+      onclick="showFullImage('${item.dataUrl}')">`;
+  }
+  if(gpsEl && item.gps){
+    if(item.gps.found){
+      gpsEl.innerHTML=`<span style="color:var(--green);">✅ GPS: ${item.gps.lat.toFixed(4)}, ${item.gps.lng.toFixed(4)}</span>`;
+    } else {
+      gpsEl.innerHTML=`<span style="color:var(--yellow);">⚠️ لا يوجد GPS</span>`;
+    }
+  }
+}
+
+function updateFileCardStatus(item){
+  const statusEl = document.getElementById(`fcs-${item.id}`);
+  const cardEl = document.getElementById(`fc-${item.id}`);
+  if(!statusEl) return;
+  const cfg = {
+    pending: ['انتظار','var(--s3)','var(--mu)'],
+    analyzing: ['جاري التحليل...','rgba(77,159,255,.15)','var(--blue)'],
+    done: ['✅ تم','rgba(0,229,160,.15)','var(--green)'],
+    error: ['❌ خطأ','rgba(255,61,90,.15)','var(--red)']
+  }[item.status]||['?','var(--s3)','var(--mu)'];
+  statusEl.textContent=cfg[0]; statusEl.style.background=cfg[1]; statusEl.style.color=cfg[2];
+  if(cardEl) cardEl.style.borderColor = item.status==='done'?'rgba(0,229,160,.25)':item.status==='analyzing'?'rgba(77,159,255,.3)':'var(--bd)';
+}
+
+function removeFromQueue(id){
+  fileQueue = fileQueue.filter(f=>f.id!=id);
+  const card = document.getElementById(`fc-${id}`);
+  if(card) card.remove();
+  updateQueueUI();
+}
+
+function clearAllFiles(){
+  fileQueue=[];
+  document.getElementById('fileCards').innerHTML='';
+  updateQueueUI();
+}
+
+function updateQueueUI(){
+  const n = fileQueue.length;
+  document.getElementById('queueCount').textContent = n;
+  document.getElementById('fileQueue').style.display = n>0?'block':'none';
+  document.getElementById('analyzeBtn').disabled = n===0;
+  document.getElementById('analyzeBtn').disabled = n===0;
+}
+
+/* ── ANALYZE NEXT (one by one) ── */
+async function analyzeNextFile(){
+  const pending = fileQueue.filter(f=>f.status==='pending');
+  if(!pending.length){ showToast('كل الملفات تم تحليلها!','ok'); return; }
+  await analyzeFileItem(pending[0]);
+}
+
+/* ── BIN SUGGESTIONS ── */
+let binMarkers = [];
+
+function makeBinIcon(){
+  return L.divIcon({
+    className:'', iconSize:[38,38], iconAnchor:[19,19],
+    html:`<div style="width:38px;height:38px;border-radius:50%;
+      background:linear-gradient(135deg,#00e5a0,#00b377);
+      border:2px solid rgba(255,255,255,.4);
+      display:flex;align-items:center;justify-content:center;
+      font-size:18px;box-shadow:0 3px 12px rgba(0,229,160,.5);
+      animation:popIn .4s cubic-bezier(.34,1.56,.64,1);">♻️</div>`
+  });
+}
+
+function distMeters(a,b){
+  const R=6371000,dLat=(b.lat-a.lat)*Math.PI/180,dLng=(b.lng-a.lng)*Math.PI/180;
+  const aa=Math.sin(dLat/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+  return R*2*Math.atan2(Math.sqrt(aa),Math.sqrt(1-aa));
+}
+
+function suggestBinLocations(pts, droneLat, droneLng){
+  if(!pts.length) return;
+  const suggestions=[];
+
+  // Calculate centroid of all trash points
+  const centerLat = pts.reduce((s,p)=>s+p.lat,0)/pts.length;
+  const centerLng = pts.reduce((s,p)=>s+p.lng,0)/pts.length;
+
+  if(pts.length===1){
+    // Single point — suggest bin AT the trash location
+    suggestions.push({
+      lat: pts[0].lat,
+      lng: pts[0].lng,
+      name:'سلة مهملات مقترحة',
+      reason:`عند موقع المهملات "${pts[0].name}" مباشرة`
+    });
+  } else {
+    // Multiple points — place bin at geometric center
+    suggestions.push({
+      lat: centerLat,
+      lng: centerLng,
+      name:'سلة مهملات مقترحة — مركزية',
+      reason:`في وسط ${pts.length} مواقع مهملات`
+    });
+    // If any point is far (>15m) from center, add extra bin near it
+    pts.forEach((p,i)=>{
+      if(suggestions.length>=3) return;
+      const d=distMeters(p,{lat:centerLat,lng:centerLng});
+      if(d>15){
+        suggestions.push({
+          lat:p.lat,
+          lng:p.lng,
+          name:`سلة مهملات مقترحة ${suggestions.length+1}`,
+          reason:`عند موقع "${p.name}"`
+        });
+      }
+    });
+  }
+
+  // Add bin markers to map
+  suggestions.forEach(s=>{
+    const gmaps=`https://www.google.com/maps?q=${s.lat},${s.lng}`;
+    const m=L.marker([s.lat,s.lng],{icon:makeBinIcon()}).addTo(map)
+      .bindPopup(`<div style="font-family:Tajawal;direction:rtl;min-width:200px;padding:4px;">
+        <b style="font-size:14px;color:#00e5a0;">♻️ ${s.name}</b><br>
+        <div style="background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.25);
+          border-radius:8px;padding:5px 8px;margin:6px 0;font-size:11px;color:#00e5a0;">
+          💡 ${s.reason}
+        </div>
+        <div style="font-size:10px;color:#888;margin-bottom:7px;">📍 ${s.lat.toFixed(6)}, ${s.lng.toFixed(6)}</div>
+        <a href="${gmaps}" target="_blank" style="display:block;background:#00e5a0;color:#060b14;
+          text-align:center;padding:6px;border-radius:7px;font-size:11px;font-weight:700;text-decoration:none;">
+          🗺️ فتح الموقع في Google Maps
+        </a></div>`);
+    binMarkers.push(m);
+  });
+
+  if(suggestions.length>0)
+    showToast(`♻️ ${suggestions.length} موقع سلة مقترح`,'ok');
+}
+
+/* ── CLEAR BIN MARKERS ── */
+function clearBinMarkers(){
+  binMarkers.forEach(m=>map.removeLayer(m));
+  binMarkers=[];
+}
+let manualGpsOpen = false;
+function toggleManualGPS(){
+  manualGpsOpen = !manualGpsOpen;
+  const panel = document.getElementById('manualGpsPanel');
+  const arrow = document.getElementById('manualGpsArrow');
+  const btn = document.getElementById('manualGpsToggle');
+  if(manualGpsOpen){
+    panel.style.display='flex';
+    arrow.style.transform='rotate(180deg)';
+    btn.style.borderColor='var(--blue)';
+    btn.style.color='var(--blue)';
+  } else {
+    panel.style.display='none';
+    arrow.style.transform='';
+    btn.style.borderColor='var(--bd)';
+    btn.style.color='var(--mu)';
+  }
+}
+
+function updateManualPreview(){
+  const lat = parseFloat(document.getElementById('droneLat')?.value);
+  const lng = parseFloat(document.getElementById('droneLng')?.value);
+  const preview = document.getElementById('manualPreview');
+  const previewText = document.getElementById('manualPreviewText');
+  if(!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180){
+    if(preview){ preview.style.display='flex'; }
+    if(previewText){ previewText.textContent = `${lat.toFixed(5)}, ${lng.toFixed(5)}`; }
+    // Add manual marker on map
+    if(window._manualMarker) map.removeLayer(window._manualMarker);
+    window._manualMarker = L.circleMarker([lat,lng],{
+      radius:8,color:'var(--blue)',fillColor:'#4d9fff',fillOpacity:0.6,weight:2
+    }).addTo(map).bindPopup(`<div style="font-family:Tajawal;direction:rtl;">📍 موقع يدوي<br><small>${lat.toFixed(5)}, ${lng.toFixed(5)}</small></div>`);
+  } else {
+    if(preview){ preview.style.display='none'; }
+  }
+}
+
+function flyToManual(){
+  const lat = parseFloat(document.getElementById('droneLat')?.value);
+  const lng = parseFloat(document.getElementById('droneLng')?.value);
+  if(!isNaN(lat) && !isNaN(lng)) map.flyTo([lat,lng],15,{duration:1});
+}
+
+/* ── UNIFIED ANALYZE ── */
+function analyzeUnified(){
+  if(currentMode === 'video') analyzeVideo();
+  else analyzeAllFiles();
+}
+
+/* ── ANALYZE ALL ── */
+async function analyzeAllFiles(){
+  if(!geminiKey){ openApiModal(); return; }
+  const pending = fileQueue.filter(f=>f.status==='pending');
+  if(!pending.length){ showToast('لا توجد ملفات للتحليل','err'); return; }
+
+  document.getElementById('batchProgress').style.display='block';
+  document.getElementById('analyzeBtn').disabled=true;
+  document.getElementById('analyzeBtn').disabled=true;
+
+  for(let i=0;i<pending.length;i++){
+    const item = pending[i];
+    const pct = Math.round((i/pending.length)*100);
+    document.getElementById('bpPercent').textContent=pct+'%';
+    document.getElementById('bpFill').style.width=pct+'%';
+    document.getElementById('bpLabel').textContent=`تحليل ${i+1} من ${pending.length}`;
+    document.getElementById('bpSub').textContent=`الملف: ${item.file.name}`;
+    await analyzeFileItem(item);
+    if(i < pending.length-1) await new Promise(r=>setTimeout(r,800));
+  }
+
+  document.getElementById('bpPercent').textContent='100%';
+  document.getElementById('bpFill').style.width='100%';
+  document.getElementById('bpLabel').textContent=`✅ اكتمل تحليل ${pending.length} ملف`;
+  document.getElementById('bpSub').textContent=`إجمالي النقاط: ${trashPoints.length}`;
+  document.getElementById('analyzeBtn').disabled=false;
+  document.getElementById('analyzeBtn').disabled=false;
+  showToast(`✅ تم تحليل ${pending.length} ملف!`,'ok');
+  switchTab('points');
+}
+
+/* ── ANALYZE SINGLE FILE ITEM ── */
+async function analyzeFileItem(item){
+  if(!geminiKey){ openApiModal(); return; }
+  if(!item.dataUrl){ showToast('الملف لم يتم تحميله بعد','err'); return; }
+
+  item.status='analyzing';
+  updateFileCardStatus(item);
+
+  // Get GPS — priority: locateMe > EXIF from image > manual input
+  let lat,lng,area;
+  if(detectedGPS){
+    lat=detectedGPS.lat; lng=detectedGPS.lng;
+    area=document.getElementById('droneAreaAuto')?.value.trim()||document.getElementById('droneArea')?.value.trim()||'منطقة مجهولة';
+  } else if(item.gps?.found){
+    lat=item.gps.lat; lng=item.gps.lng;
+    area=document.getElementById('droneAreaAuto')?.value.trim()||'منطقة مجهولة';
+  } else {
+    lat=parseFloat(document.getElementById('droneLat')?.value);
+    lng=parseFloat(document.getElementById('droneLng')?.value);
+    area=document.getElementById('droneArea')?.value||'منطقة غير محددة';
+    // No GPS at all — warn and open manual panel
+    if(!lat || !lng || isNaN(lat) || isNaN(lng)){
+      item.status='pending';
+      updateFileCardStatus(item);
+      if(!manualGpsOpen) toggleManualGPS();
+      showToast('⚠️ أدخل إحداثيات الدرون أولاً ثم اضغط تحليل AI','err');
+      document.getElementById('droneLat').focus();
+      return;
+    }
+  }
+
+  try {
+    const base64=item.dataUrl.split(',')[1];
+    const mimeType=item.file.type;
+    const prompt=`You are an AI specialized in analyzing drone aerial images to detect trash, waste, and garbage dumps.
+
+Drone GPS: latitude=${lat}, longitude=${lng}, area=${area}
+
+TASK: Analyze this aerial image and detect ALL visible trash/waste/garbage locations.
+
+RESPOND WITH ONLY THIS JSON (no markdown, no extra text):
+{"hasTrash":true,"confidence":"high","description":"وصف عربي مفصل للمهملات","trashTypes":["نوع1","نوع2"],"severity":"high","recommendation":"توصية بالتنظيف","spots":[{"id":1,"name":"اسم الموقع بالعربي","description":"وصف المهملات","confidence":"high","latOffset":0.0003,"lngOffset":-0.0002}]}
+
+RULES:
+- latOffset and lngOffset MUST be 0.0 for all spots since we cannot determine exact pixel position. Set both to 0.0
+- Detect EVERY distinct trash area visible
+- confidence: "high" if clearly trash, "medium" if suspected
+- If NO trash found: {"hasTrash":false,"confidence":"high","description":"المنطقة نظيفة","trashTypes":[],"severity":"low","recommendation":"لا يوجد تدخل مطلوب","spots":[]}`;
+
+    const response=await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiKey}`,
+      {method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({
+         contents:[{parts:[{inline_data:{mime_type:mimeType,data:base64}},{text:prompt}]}],
+         generationConfig:{temperature:0.1,maxOutputTokens:2000}
+       })}
+    );
+
+    if(!response.ok){
+      const err=await response.json();
+      throw new Error(err.error?.message||'فشل الاتصال بـ Gemini');
+    }
+    const data=await response.json();
+    let text=data.candidates?.[0]?.content?.parts?.[0]?.text?.trim()||'';
+    // Clean any markdown
+    text=text.replace(/```json\n?/gi,'').replace(/```\n?/gi,'').trim();
+    const jsonMatch=text.match(/\{[\s\S]*\}/);
+    if(!jsonMatch) throw new Error('لم يرجع Gemini بيانات صحيحة');
+    const result=JSON.parse(jsonMatch[0]);
+
+    // Add drone marker
+    L.marker([lat,lng],{icon:droneIcon}).addTo(map)
+      .bindPopup(`<div style="font-family:Tajawal;direction:rtl;text-align:right;"><b>🚁 ${area}</b><br><small style="color:#888;">${item.file.name}</small></div>`);
+
+    // Add trash spots to map
+    if(result.spots?.length){
+      const addedPts=[];
+      result.spots.forEach((spot,i)=>{
+        const sLat=lat+(parseFloat(spot.latOffset)||0);
+        const sLng=lng+(parseFloat(spot.lngOffset)||0);
+        const gmapsLink=`https://www.google.com/maps?q=${sLat},${sLng}`;
+        const navLink=`https://www.google.com/maps/dir/?api=1&destination=${sLat},${sLng}`;
+        const icon=spot.confidence==='high'?trashIcon:medIcon;
+
+        const marker=L.marker([sLat,sLng],{icon}).addTo(map)
+          .bindPopup(`<div style="font-family:Tajawal;direction:rtl;min-width:210px;padding:4px;">
+            <b style="font-size:14px;">🗑️ ${spot.name}</b><br>
+            <span style="font-size:11px;background:${spot.confidence==='high'?'rgba(255,61,90,.15)':'rgba(255,209,102,.15)'};color:${spot.confidence==='high'?'#ff3d5a':'#ffd166'};padding:2px 7px;border-radius:10px;">
+              ${spot.confidence==='high'?'مهملات مكتشفة':'اشتباه بوجود مهملات'}
+            </span><br>
+            <div style="margin:6px 0;font-size:12px;color:#aaa;">${spot.description||''}</div>
+            <div style="font-size:10px;color:#888;margin-bottom:7px;">📍 ${sLat.toFixed(6)}, ${sLng.toFixed(6)}</div>
+            <div style="display:flex;gap:5px;">
+              <a href="${gmapsLink}" target="_blank" style="flex:1;display:block;background:#4285f4;color:#fff;text-align:center;padding:6px;border-radius:7px;font-size:11px;font-weight:700;text-decoration:none;">🗺️ عرض</a>
+              <a href="${navLink}" target="_blank" style="flex:1;display:block;background:#00c853;color:#fff;text-align:center;padding:6px;border-radius:7px;font-size:11px;font-weight:700;text-decoration:none;">🧭 توجيه</a>
+            </div></div>`);
+        const pt={name:spot.name,lat:sLat,lng:sLng,confidence:spot.confidence,description:spot.description||'',gmapsLink,marker,id:Date.now()+Math.random()+i};
+        trashPoints.push(pt);
+        addedPts.push(pt);
+      });
+
+
+      updatePointsUI();
+
+      // Zoom to show all found points
+      if(addedPts.length===1){
+        map.flyTo([addedPts[0].lat,addedPts[0].lng],17,{duration:1});
+      } else {
+        const bounds=L.latLngBounds([[lat,lng],...addedPts.map(p=>[p.lat,p.lng])]);
+        map.flyToBounds(bounds,{padding:[40,40],duration:1});
+      }
+
+      showToast(`✅ ${result.spots.length} موقع مهملات + اقتراحات السلال`,'ok');
+      switchTab('points');
+    } else {
+      map.flyTo([lat,lng],15,{duration:1});
+      showToast('✅ لا توجد مهملات في هذه المنطقة','ok');
+    }
+
+    item.status='done';
+    updateFileCardStatus(item);
+    analysisHistory.unshift({file:item.file,preview:item.dataUrl,result,lat,lng,area,time:new Date()});
+    document.getElementById('hImages').textContent=analysisHistory.length;
+    renderHistory();
+
+  } catch(e){
+    item.status='error';
+    updateFileCardStatus(item);
+    showToast(`❌ ${e.message}`,'err');
+    console.error('analyzeFileItem error:',e);
+  }
+}
+
+/* kept for compatibility */
+async function analyzeImage(){ await analyzeNextFile(); }
+function clearImage(){ clearAllFiles(); }
+let detectedGPS = null; // { lat, lng, alt, date }
+
+/* ── EXIF GPS READER ── */
+function extractEXIF(file) {
+  return new Promise((resolve) => {
+    // EXIF.js needs the file to be read first via FileReader
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      // Create a new file-like object with the data loaded
+      const loadedFile = new File([e.target.result], file.name, {type: file.type});
+      
+      EXIF.getData(loadedFile, function() {
+        try {
+          const lat  = EXIF.getTag(this, 'GPSLatitude');
+          const latR = EXIF.getTag(this, 'GPSLatitudeRef');
+          const lng  = EXIF.getTag(this, 'GPSLongitude');
+          const lngR = EXIF.getTag(this, 'GPSLongitudeRef');
+          const alt  = EXIF.getTag(this, 'GPSAltitude');
+          const date = EXIF.getTag(this, 'DateTimeOriginal') || EXIF.getTag(this, 'DateTime');
+          const make = EXIF.getTag(this, 'Make')  || '';
+          const model= EXIF.getTag(this, 'Model') || '';
+
+          if (lat && lng && lat.length === 3 && lng.length === 3) {
+            const toDecimal = (dms, ref) => {
+              const d = typeof dms[0]==='object' ? dms[0].numerator/dms[0].denominator : Number(dms[0]);
+              const m = typeof dms[1]==='object' ? dms[1].numerator/dms[1].denominator : Number(dms[1]);
+              const s = typeof dms[2]==='object' ? dms[2].numerator/dms[2].denominator : Number(dms[2]);
+              const dec = d + m/60 + s/3600;
+              return (ref==='S'||ref==='W') ? -dec : dec;
+            };
+            const latDec = toDecimal(lat, latR);
+            const lngDec = toDecimal(lng, lngR);
+            let altDec = null;
+            if (alt) altDec = typeof alt==='object' ? alt.numerator/alt.denominator : Number(alt);
+            resolve({ found:true, lat:latDec, lng:lngDec, alt:altDec, date, make, model });
+          } else {
+            resolve({ found:false, make, model });
+          }
+        } catch(e) {
+          resolve({ found:false });
+        }
+      });
+    };
+    reader.onerror = () => resolve({ found:false });
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+function parseJpegExif(buf, view) {
+  try {
+    if (view.getUint16(0) !== 0xFFD8) return { found: false };
+    let offset = 2;
+    let exifOffset = -1;
+
+    while (offset < buf.byteLength - 4) {
+      const marker = view.getUint16(offset);
+      if (offset + 2 >= buf.byteLength) break;
+      const segLen = view.getUint16(offset + 2);
+      if (marker === 0xFFE1) {
+        const h = String.fromCharCode(
+          view.getUint8(offset+4), view.getUint8(offset+5),
+          view.getUint8(offset+6), view.getUint8(offset+7));
+        if (h === 'Exif') { exifOffset = offset + 10; break; }
+      }
+      if (segLen < 2) break;
+      offset += 2 + segLen;
+    }
+
+    if (exifOffset < 0) return { found: false };
+
+    const bo = view.getUint16(exifOffset);
+    const le = bo === 0x4949;
+    const r16 = (o) => view.getUint16(exifOffset + o, le);
+    const r32 = (o) => view.getUint32(exifOffset + o, le);
+
+    const ifdOff = r32(4);
+    const ifdCnt = r16(ifdOff);
+    let gpsOff = -1;
+
+    for (let i = 0; i < ifdCnt; i++) {
+      const e = ifdOff + 2 + i * 12;
+      if (r16(e) === 0x8825) gpsOff = r32(e + 8);
+    }
+
+    if (gpsOff < 0) return { found: false };
+
+    const gpsCount = r16(gpsOff);
+    const gps = {};
+
+    for (let i = 0; i < gpsCount; i++) {
+      const e = gpsOff + 2 + i * 12;
+      const tag = r16(e);
+      const cnt = r32(e + 4);
+      const vOff = e + 8;
+
+      if (tag === 1 || tag === 3) {
+        const ptr = r32(vOff);
+        const charCode = view.getUint8(exifOffset + (cnt > 4 ? ptr : vOff - 8 + 8));
+        gps[tag] = String.fromCharCode(charCode);
+      } else if (tag === 2 || tag === 4) {
+        const ptr = r32(vOff);
+        const base = exifOffset + ptr;
+        try {
+          const deg = view.getUint32(base, le) / (view.getUint32(base+4, le)||1);
+          const min = view.getUint32(base+8, le) / (view.getUint32(base+12, le)||1);
+          const sec = view.getUint32(base+16, le) / (view.getUint32(base+20, le)||1);
+          gps[tag] = deg + min/60 + sec/3600;
+        } catch(e){}
+      }
+    }
+
+    const lat = gps[2] ? ((gps[1]==='S'?-1:1)*gps[2]) : null;
+    const lng = gps[4] ? ((gps[3]==='W'?-1:1)*gps[4]) : null;
+
+    if (lat && lng && !isNaN(lat) && !isNaN(lng))
+      return { found: true, lat, lng, alt: null, date: null };
+
+    return { found: false };
+  } catch(e) { return { found: false }; }
+}
+
+function parseXMP(buf) {
+  try {
+    // Convert buffer to string to search for XMP
+    const decoder = new TextDecoder('utf-8', { fatal: false });
+    const text = decoder.decode(new Uint8Array(buf));
+
+    // Look for XMP GPS data (DJI, and other drones embed here)
+    const latMatch = text.match(/drone-dji:GpsLatitude[>="\s]+([+-]?[\d.]+)/i) ||
+                     text.match(/exif:GPSLatitude[>="\s]+([+-]?[\d.]+)/i) ||
+                     text.match(/<GPSLatitude>([\d/]+)<\/GPSLatitude>/i);
+    const lngMatch = text.match(/drone-dji:GpsLongitude[>="\s]+([+-]?[\d.]+)/i) ||
+                     text.match(/exif:GPSLongitude[>="\s]+([+-]?[\d.]+)/i) ||
+                     text.match(/<GPSLongitude>([\d/]+)<\/GPSLongitude>/i);
+
+    if (latMatch && lngMatch) {
+      const lat = parseFloat(latMatch[1]);
+      const lng = parseFloat(lngMatch[1]);
+      if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0)
+        return { found: true, lat, lng, alt: null, date: null };
+    }
+
+    return { found: false };
+  } catch(e) { return { found: false }; }
+}
+
+function dmsToDecimal(dms, ref) {
+  if (!dms || dms.length < 3) return 0;
+  const d = typeof dms[0] === 'object' ? dms[0].numerator / dms[0].denominator : dms[0];
+  const m = typeof dms[1] === 'object' ? dms[1].numerator / dms[1].denominator : dms[1];
+  const s = typeof dms[2] === 'object' ? dms[2].numerator / dms[2].denominator : dms[2];
+  let dec = d + m / 60 + s / 3600;
+  if (ref === 'S' || ref === 'W') dec = -dec;
+  return dec;
+}
+
+function updateGPSCard(gps) {
+  const statusEl = document.getElementById('gpsStatus');
+  const coordsEl = document.getElementById('coordsDisplay');
+  const noGpsEl = document.getElementById('noGpsFallback');
+  const areaRow = document.getElementById('areaRow');
+
+  if (gps.found) {
+    detectedGPS = gps;
+    statusEl.style.display = 'none';
+    coordsEl.style.display = 'block';
+    noGpsEl.style.display = 'none';
+    areaRow.style.display = 'block';
+    document.getElementById('dispLat').textContent = gps.lat.toFixed(6);
+    document.getElementById('dispLng').textContent = gps.lng.toFixed(6);
+    document.getElementById('dispAlt').textContent = gps.alt != null ? gps.alt.toFixed(1) + ' م' : '—';
+    document.getElementById('dispDate').textContent = gps.date ? gps.date.split(' ')[0] : '—';
+    // Fly map to detected location
+    map.flyTo([gps.lat, gps.lng], 15, { duration: 1.2 });
+    showToast('📡 تم قراءة GPS من الصورة تلقائياً', 'ok');
+  } else {
+    detectedGPS = null;
+    statusEl.style.display = 'none';
+    coordsEl.style.display = 'none';
+    noGpsEl.style.display = 'block';
+    areaRow.style.display = 'none';
+    showToast('⚠️ لا يوجد GPS في الصورة — أدخل يدوياً', 'err');
+  }
+}
+
+/* old file handling removed */
+
+/* old processFile removed */
+
+function clearImage(){
+  currentFile = null; currentFileData = null; detectedGPS = null;
+  // Show upload zone again, hide file card
+  document.getElementById('uploadZone').style.display = 'block';
+  document.getElementById('fileReceivedCard').style.display = 'none';
+  document.getElementById('previewImg').src = '';
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('resultBox').classList.remove('show');
+  document.getElementById('droneFileInput').value = '';
+  // Reset GPS card
+  document.getElementById('gpsStatus').style.display = 'flex';
+  document.getElementById('gpsStatus').innerHTML = `
+    <span style="font-size:22px;">📷</span>
+    <div style="flex:1">
+      <div style="font-size:11px;font-weight:800;color:var(--mu);">في انتظار الصورة...</div>
+      <div style="font-size:10px;color:var(--mu);margin-top:2px;">ارفع صورة الدرون لقراءة GPS تلقائياً</div>
+    </div>`;
+  document.getElementById('coordsDisplay').style.display = 'none';
+  document.getElementById('noGpsFallback').style.display = 'none';
+  document.getElementById('areaRow').style.display = 'none';
+}
+
+/* ── AI ANALYSIS (Gemini) ── */
+/* old analyzeImage removed */
+
+function showResults(result, baseLat, baseLng, area){
+  const box = document.getElementById('resultBox');
+  box.classList.add('show');
+
+  // Badge
+  const badge = document.getElementById('rbBadge');
+  badge.textContent = result.hasTrash
+    ? (result.severity==='high'?'خطر عالٍ':result.severity==='medium'?'متوسط':'منخفض')
+    : 'نظيف ✅';
+  badge.className = 'rb-badge ' + (result.hasTrash ? result.severity||'high' : 'low');
+
+  // Description
+  document.getElementById('rbDesc').textContent = result.description || 'لا توجد تفاصيل';
+
+  // Tags
+  const tagsEl = document.getElementById('rbTags');
+  tagsEl.innerHTML = '';
+  (result.trashTypes||[]).forEach(t => {
+    const span = document.createElement('div');
+    span.className='rb-tag'; span.textContent=t; tagsEl.appendChild(span);
+  });
+
+  // Spots
+  const spotsEl = document.getElementById('rbSpots');
+  spotsEl.innerHTML = '';
+  if(!result.spots || result.spots.length===0){
+    spotsEl.innerHTML='<div style="font-size:11px;color:var(--mu);text-align:center;padding:10px;">لا توجد مواقع مهملات مكتشفة</div>';
+    document.getElementById('rbAddAll').style.display='none';
+    return;
+  }
+  document.getElementById('rbAddAll').style.display='block';
+
+  result.spots.forEach((spot,i) => {
+    const spotLat = baseLat + (spot.latOffset||0);
+    const spotLng = baseLng + (spot.lngOffset||0);
+    spot._lat = spotLat; spot._lng = spotLng; spot._added = false;
+
+    const div = document.createElement('div');
+    div.className='rb-spot'; div.id=`spot-${i}`;
+    div.innerHTML=`
+      <div class="rb-spot-icon">🗑️</div>
+      <div class="rb-spot-info">
+        <div class="rb-spot-name">${spot.name}</div>
+        <div class="rb-spot-coords">${spotLat.toFixed(5)}, ${spotLng.toFixed(5)}</div>
+      </div>
+      <div class="rb-spot-conf ${spot.confidence==='high'?'h':'m'}">
+        ${spot.confidence==='high'?'مهملات مكتشفة':'اشتباه بوجود مهملات'}
+      </div>`;
+    div.onclick=()=>addSpotToMap(spot, i);
+    spotsEl.appendChild(div);
+  });
+
+  // Store for addAll
+  window._currentSpots = result.spots;
+  window._currentArea = area;
+
+  switchTab('upload');
+}
+
+function addSpotToMap(spot, idx){
+  if(spot._added) return;
+  spot._added = true;
+
+  const icon = spot.confidence==='high' ? trashIcon : medIcon;
+  const marker = L.marker([spot._lat, spot._lng], { icon })
+    .addTo(map)
+    .bindPopup(`<b style="font-family:Tajawal">🗑️ ${spot.name}</b><br>
+      <small style="color:#888">${spot._lat.toFixed(5)}, ${spot._lng.toFixed(5)}</small><br>
+      <small>${spot.description||''}</small>`);
+
+  const pt = { name: spot.name, lat: spot._lat, lng: spot._lng,
+    confidence: spot.confidence, description: spot.description, marker, id: Date.now()+Math.random() };
+  trashPoints.push(pt);
+
+  document.getElementById(`spot-${idx}`).classList.add('added');
+  document.getElementById(`spot-${idx}`).innerHTML += '<span style="margin-right:auto;color:var(--green);font-size:11px;font-weight:800;"> ✓ أُضيف</span>';
+
+  updatePointsUI();
+  map.flyTo([spot._lat, spot._lng], 16, { duration: 0.8 });
+  showToast(`✅ أُضيف: ${spot.name}`, 'ok');
+}
+
+function addAllToMap(){
+  const spots = window._currentSpots || [];
+  spots.forEach((s,i) => { if(!s._added) addSpotToMap(s,i); });
+  showToast(`✅ أُضيف ${spots.filter(s=>s._added).length} نقطة للخريطة`, 'ok');
+  setTimeout(()=>switchTab('points'), 800);
+}
+
+/* ── POINTS UI ── */
+function updatePointsUI(){
+  const n = trashPoints.length;
+  document.getElementById('hTrash').textContent = n;
+  document.getElementById('ptCount') && (document.getElementById('ptCount').textContent = n);
+  const list = document.getElementById('pointsList');
+  if(!list) return;
+  if(!n){
+    list.innerHTML='<div class="empty"><span class="empty-icon">📍</span><div class="empty-txt">لا توجد نقاط بعد</div><div class="empty-sub">حلل صورة لإضافة نقاط تلقائياً</div></div>';
+    return;
+  }
+  list.innerHTML='';
+  trashPoints.forEach(pt => {
+    const gmaps = pt.gmapsLink || `https://www.google.com/maps?q=${pt.lat},${pt.lng}`;
+    const div=document.createElement('div'); div.className='pt-item';
+    div.style.cssText='flex-direction:column;align-items:stretch;gap:6px;cursor:default;';
+    div.innerHTML=`
+      <div style="display:flex;align-items:center;gap:9px;">
+        <div class="pt-dot trash"></div>
+        <div class="pt-info" style="flex:1;">
+          <div class="pt-name">${pt.name}</div>
+          <div class="pt-coords">${pt.lat.toFixed(6)}, ${pt.lng.toFixed(6)}</div>
+        </div>
+        <button class="pt-del" onclick="removePoint('${pt.id}')">✕</button>
+      </div>
+      ${pt.description?`<div style="font-size:10px;color:var(--mu);line-height:1.4;padding-right:18px;">${pt.description}</div>`:''}
+      <div style="display:flex;gap:6px;">
+        <button onclick="map.flyTo([${pt.lat},${pt.lng}],17,{duration:0.6});trashPoints.find(p=>p.id=='${pt.id}')?.marker?.openPopup();"
+          style="flex:1;padding:5px;background:var(--s3);border:1px solid var(--bd);border-radius:7px;
+          font-family:Tajawal;font-size:10px;font-weight:700;color:var(--tx);cursor:pointer;">
+          📍 على الخريطة
+        </button>
+        <a href="${gmaps}" target="_blank"
+          style="flex:1;padding:5px;background:rgba(66,133,244,.15);border:1px solid rgba(66,133,244,.3);
+          border-radius:7px;font-size:10px;font-weight:700;color:#4285f4;cursor:pointer;
+          text-align:center;text-decoration:none;">
+          🗺️ Google Maps
+        </a>
+      </div>`;
+    list.appendChild(div);
+  });
+}
+
+/* ── REPORT ── */
+function generateReport(result, lat, lng, area){
+  const spots = result.spots || [];
+  if(!spots.length) return;
+
+  // Show report section in results
+  const reportEl = document.getElementById('reportSection');
+  if(!reportEl) return;
+
+  reportEl.style.display = 'block';
+  let html = `<div style="font-size:11px;font-weight:700;color:var(--mu);letter-spacing:1px;margin-bottom:8px;">📊 تقرير النقاط</div>`;
+
+  spots.forEach((spot,i)=>{
+    const sLat = lat+(parseFloat(spot.latOffset)||0);
+    const sLng = lng+(parseFloat(spot.lngOffset)||0);
+    const gmaps = `https://www.google.com/maps?q=${sLat},${sLng}`;
+    const nav = `https://www.google.com/maps/dir/?api=1&destination=${sLat},${sLng}`;
+    html += `
+      <div style="background:var(--s3);border:1px solid var(--bd);border-radius:11px;padding:10px;margin-bottom:8px;">
+        <div style="font-size:12px;font-weight:800;margin-bottom:4px;">🗑️ ${spot.name}</div>
+        <div style="font-size:10px;color:var(--mu);margin-bottom:6px;">${spot.description||''}</div>
+        <div style="font-size:10px;color:var(--mu);margin-bottom:8px;">📍 ${sLat.toFixed(6)}, ${sLng.toFixed(6)}</div>
+        <div style="display:flex;gap:5px;">
+          <a href="${gmaps}" target="_blank"
+            style="flex:1;padding:6px;background:rgba(66,133,244,.15);border:1px solid rgba(66,133,244,.3);
+            border-radius:7px;font-size:10px;font-weight:700;color:#4285f4;text-align:center;text-decoration:none;">
+            🗺️ عرض
+          </a>
+          <a href="${nav}" target="_blank"
+            style="flex:1;padding:6px;background:rgba(0,229,160,.1);border:1px solid rgba(0,229,160,.25);
+            border-radius:7px;font-size:10px;font-weight:700;color:var(--green);text-align:center;text-decoration:none;">
+            🧭 توجيه
+          </a>
+          <button onclick="copyCoords('${sLat}','${sLng}')"
+            style="flex:1;padding:6px;background:var(--s2);border:1px solid var(--bd);
+            border-radius:7px;font-size:10px;font-weight:700;color:var(--mu);cursor:pointer;font-family:Tajawal;">
+            📋 نسخ
+          </button>
+        </div>
+      </div>`;
+  });
+
+  if(result.recommendation){
+    html += `<div style="background:rgba(255,209,102,.08);border:1px solid rgba(255,209,102,.2);
+      border-radius:11px;padding:10px;font-size:11px;color:var(--yellow);font-weight:700;line-height:1.5;">
+      💡 ${result.recommendation}</div>`;
+  }
+
+  reportEl.innerHTML = html;
+}
+
+function copyCoords(lat,lng){
+  navigator.clipboard.writeText(`${lat}, ${lng}`);
+  showToast('✅ تم نسخ الإحداثيات','ok');
+}
+
+/* ── LOCATE ME ── */
+let locationMarker = null;
+let locationCircle = null;
+
+function locateMe(){
+  if(!navigator.geolocation){
+    showToast('❌ المتصفح لا يدعم تحديد الموقع','err'); return;
+  }
+
+  // Update button UI to loading
+  const btn = document.getElementById('locateMeBtn');
+  const icon = document.getElementById('locateIcon');
+  const txt = document.getElementById('locateText');
+  if(btn){ btn.disabled=true; if(icon) icon.textContent='⏳'; if(txt) txt.textContent='جاري تحديد موقعك...'; }
+
+  showToast('📍 جاري تحديد موقعك...','ok');
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const lat = pos.coords.latitude;
+      const lng = pos.coords.longitude;
+      const acc = Math.round(pos.coords.accuracy);
+      const alt = pos.coords.altitude ? pos.coords.altitude.toFixed(0) : null;
+
+      // Fill manual inputs
+      const latInput = document.getElementById('droneLat');
+      const lngInput = document.getElementById('droneLng');
+      const altInput = document.getElementById('droneAlt');
+      if(latInput) latInput.value = lat.toFixed(6);
+      if(lngInput) lngInput.value = lng.toFixed(6);
+      if(altInput && alt) altInput.value = alt;
+
+      // Update detected GPS if in auto mode
+      if(detectedGPS){
+        detectedGPS.lat = lat;
+        detectedGPS.lng = lng;
+        if(alt) detectedGPS.alt = parseFloat(alt);
+        document.getElementById('dispLat').textContent = lat.toFixed(6);
+        document.getElementById('dispLng').textContent = lng.toFixed(6);
+        if(alt) document.getElementById('dispAlt').textContent = alt+'م';
+      }
+
+      // Show located display
+      const display = document.getElementById('locatedDisplay');
+      if(display){
+        display.style.display = 'block';
+        document.getElementById('locLat').textContent = lat.toFixed(6);
+        document.getElementById('locLng').textContent = lng.toFixed(6);
+        document.getElementById('locAccuracy').textContent = `🎯 دقة التحديد: ±${acc} متر`;
+      }
+
+      // Add/update marker on map
+      if(locationMarker) map.removeLayer(locationMarker);
+      if(locationCircle) map.removeLayer(locationCircle);
+
+      locationMarker = L.marker([lat,lng], {
+        icon: L.divIcon({
+          className:'',
+          iconSize:[20,20], iconAnchor:[10,10],
+          html:`<div style="width:20px;height:20px;background:#4d9fff;border:3px solid #fff;
+            border-radius:50%;box-shadow:0 0 0 4px rgba(77,159,255,.3),0 3px 12px rgba(0,0,0,.4);"></div>`
+        })
+      }).addTo(map).bindPopup(`
+        <div style="font-family:Tajawal;direction:rtl;text-align:right;">
+          <b>📍 موقعك الحالي</b><br>
+          <small>${lat.toFixed(6)}, ${lng.toFixed(6)}</small><br>
+          <small style="color:#888;">دقة: ±${acc}م</small>
+        </div>`).openPopup();
+
+      locationCircle = L.circle([lat,lng],{
+        radius: acc, color:'#4d9fff', fillColor:'#4d9fff',
+        fillOpacity:0.08, weight:1.5, dashArray:'4'
+      }).addTo(map);
+
+      map.flyTo([lat,lng], 15, {duration:1.2});
+
+      // Reset button
+      if(btn){ btn.disabled=false; if(icon) icon.textContent='✅'; if(txt) txt.textContent='تم تحديد موقعك'; }
+      setTimeout(()=>{ if(icon) icon.textContent='📍'; if(txt) txt.textContent='تحديث موقعي'; if(btn) btn.disabled=false; },3000);
+
+      showToast(`✅ تم تحديد موقعك — دقة ±${acc}م`,'ok');
+    },
+    (err) => {
+      if(btn){ btn.disabled=false; if(icon) icon.textContent='📍'; if(txt) txt.textContent='اكتشف موقعي الحالي'; }
+      const msgs = {1:'❌ تم رفض إذن الموقع — فعّله من إعدادات المتصفح', 2:'❌ تعذر تحديد الموقع', 3:'❌ انتهت مدة البحث عن الموقع'};
+      showToast(msgs[err.code]||'❌ خطأ في تحديد الموقع','err');
+    },
+    { enableHighAccuracy:true, timeout:10000, maximumAge:0 }
+  );
+}
+
+function removePoint(id){
+  const pt = trashPoints.find(p=>p.id==id);
+  if(pt){ map.removeLayer(pt.marker); trashPoints=trashPoints.filter(p=>p.id!=id); }
+  updatePointsUI();
+}
+
+function clearAllPoints(){
+  trashPoints.forEach(p=>{ if(p.marker) map.removeLayer(p.marker); });
+  droneMarkers.forEach(m=>map.removeLayer(m));
+  zoneCircles.forEach(c=>map.removeLayer(c));
+  clearBinMarkers();
+  trashPoints=[]; droneMarkers=[]; zoneCircles=[];
+  updatePointsUI();
+  showToast('تم مسح كل النقاط','ok');
+}
+
+/* ── HISTORY ── */
+function renderHistory(){
+  const list = document.getElementById('historyList');
+  if(!analysisHistory.length){
+    list.innerHTML='<div class="empty"><span class="empty-icon">📂</span><div class="empty-txt">لا توجد صور محللة بعد</div><div class="empty-sub">ارفع صورة من الدرون وحللها</div></div>';
+    return;
+  }
+  list.innerHTML='';
+
+  analysisHistory.forEach((h,i)=>{
+    const spots=h.result?.spots||[];
+    const isVideo = h.isVideo || false;
+    const div=document.createElement('div');
+    div.style.cssText='background:var(--s2);border:1px solid var(--bd);border-radius:14px;overflow:hidden;margin-bottom:10px;';
+
+    // File preview
+    const previewHtml = isVideo
+      ? `<video src="${h.preview}" style="width:100%;height:140px;object-fit:cover;display:block;background:#000;" controls muted></video>`
+      : `<img src="${h.preview}" style="width:100%;height:140px;object-fit:cover;display:block;cursor:pointer;"
+           onclick="showFullImage('${h.preview}')" title="اضغط لعرض الصورة كاملة">`;
+
+    div.innerHTML=`
+      ${previewHtml}
+      <div style="padding:10px 12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:12px;font-weight:800;">${isVideo?'🎬':'📸'} ${h.area||'منطقة غير محددة'}</div>
+          <div style="background:var(--rg);border:1px solid rgba(255,61,90,.3);border-radius:20px;
+            padding:2px 9px;font-size:10px;font-weight:800;color:var(--red);">
+            ${spots.length} نقطة
+          </div>
+        </div>
+        <div style="font-size:10px;color:var(--mu);margin-bottom:8px;">
+          📅 ${h.time.toLocaleDateString('ar')} ${h.time.toLocaleTimeString('ar')} •
+          📍 ${h.lat?.toFixed(4)||'—'}, ${h.lng?.toFixed(4)||'—'}
+        </div>
+        ${h.result?.description?`<div style="font-size:11px;color:var(--tx);margin-bottom:8px;line-height:1.5;background:var(--s3);border-radius:8px;padding:7px 9px;">${h.result.description}</div>`:''}
+        <div style="display:flex;gap:6px;">
+          <button onclick="map.flyTo([${h.lat},${h.lng}],14,{duration:0.8})"
+            style="flex:1;padding:6px;background:var(--s3);border:1px solid var(--bd);border-radius:8px;
+            font-family:'Tajawal',sans-serif;font-size:10px;font-weight:700;color:var(--tx);cursor:pointer;">
+            🗺️ الخريطة
+          </button>
+          <a href="https://www.google.com/maps?q=${h.lat},${h.lng}" target="_blank"
+            style="flex:1;padding:6px;background:rgba(66,133,244,.1);border:1px solid rgba(66,133,244,.25);
+            border-radius:8px;font-size:10px;font-weight:700;color:#4285f4;text-align:center;text-decoration:none;">
+            Google Maps
+          </a>
+          <button onclick="downloadFile('${h.preview}','${isVideo?'فيديو':'صورة'}_${i+1}.${isVideo?'mp4':'jpg'}')"
+            style="flex:1;padding:6px;background:var(--gg);border:1px solid rgba(0,229,160,.2);
+            border-radius:8px;font-family:'Tajawal',sans-serif;font-size:10px;font-weight:700;color:var(--green);cursor:pointer;">
+            ⬇️ تحميل
+          </button>
+        </div>
+      </div>`;
+    list.appendChild(div);
+  });
+}
+
+/* ── FULL IMAGE VIEWER ── */
+function showFullImage(src){
+  const overlay=document.createElement('div');
+  overlay.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:pointer;';
+  overlay.innerHTML=`<img src="${src}" style="max-width:95vw;max-height:95vh;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.5);">`;
+  overlay.onclick=()=>overlay.remove();
+  document.body.appendChild(overlay);
+}
+
+function downloadFile(src, filename){
+  const a=document.createElement('a');
+  a.href=src; a.download=filename; a.click();
+}
+
+/* ── GOOGLE MAPS ROUTE ── */
+function openGoogleMapsRoute(){
+  if(!trashPoints.length){ showToast('لا توجد نقاط مهملات بعد','err'); return; }
+
+  if(trashPoints.length===1){
+    // Single point - just open it
+    window.open(`https://www.google.com/maps?q=${trashPoints[0].lat},${trashPoints[0].lng}`,'_blank');
+    return;
+  }
+
+  // Build waypoints URL for Google Maps Directions
+  // Max 10 waypoints in Google Maps URL
+  const pts = trashPoints.slice(0,10);
+  const origin = `${pts[0].lat},${pts[0].lng}`;
+  const destination = `${pts[pts.length-1].lat},${pts[pts.length-1].lng}`;
+  const waypoints = pts.slice(1,-1).map(p=>`${p.lat},${p.lng}`).join('|');
+
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
+  if(waypoints) url += `&waypoints=${encodeURIComponent(waypoints)}`;
+
+  window.open(url,'_blank');
+
+  if(trashPoints.length>10){
+    showToast(`⚠️ Google Maps يدعم 10 نقاط فقط — تم أخذ أول 10`,'err');
+  } else {
+    showToast(`✅ تم فتح مسار ${trashPoints.length} نقطة في Google Maps`,'ok');
+  }
+}
+
+/* ── DRAW ROUTE ON MAP ── */
+let routePolyline = null;
+function drawRouteOnMap(){
+  if(routePolyline){ map.removeLayer(routePolyline); routePolyline=null; return; }
+  if(trashPoints.length<2){ showToast('تحتاج نقطتين على الأقل','err'); return; }
+  const latlngs = trashPoints.map(p=>[p.lat,p.lng]);
+  routePolyline = L.polyline(latlngs,{
+    color:'#4285f4', weight:3, dashArray:'8,6', opacity:0.8
+  }).addTo(map);
+  map.fitBounds(routePolyline.getBounds(),{padding:[30,30]});
+  showToast('تم رسم المسار على الخريطة','ok');
+}
+
+/* ── TABS ── */
+function switchTab(tab){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['upload','history','points','settings'][i]===tab));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+tab).classList.add('active');
+}
+
+/* ── TOAST ── */
+function showToast(msg,type='ok'){
+  const t=document.createElement('div'); t.className=`toast ${type}`; t.textContent=msg;
+  document.body.appendChild(t); setTimeout(()=>t.remove(),2500);
+}
+
+// Apply saved theme on load
+setTimeout(()=>{
+  if(currentTheme==='light') setTheme('light');
+  else document.getElementById('themeToggleBtn').textContent='☀️';
+},100);
+
+/* ── VIDEO MODE ── */
+let currentMode = 'image';
+let videoFile = null;
+let videoInterval = 15; // seconds between frames
+let videoAnalysisRunning = false;
+
+function switchMode(mode) {
+  currentMode = mode;
+  document.getElementById('modeImg').classList.toggle('active', mode==='image');
+  document.getElementById('modeVid').classList.toggle('active', mode==='video');
+  document.getElementById('imageUploadSection').style.display = mode==='image' ? 'block' : 'none';
+  document.getElementById('videoUploadSection').style.display = mode==='video' ? 'block' : 'none';
+}
+
+function chgVideoInterval(d) {
+  videoInterval = Math.max(1, Math.min(30, videoInterval + d));
+  document.getElementById('videoIntervalVal').textContent = videoInterval;
+  updateExpectedFrames();
+}
+
+function updateExpectedFrames() {
+  const vid = document.getElementById('previewVideo');
+  if (!vid || !vid.duration) return;
+  const frames = Math.floor(vid.duration / videoInterval);
+  document.getElementById('expectedFrames').textContent = frames + ' فريم';
+}
+
+function handleVideoDrop(e) {
+  e.preventDefault();
+  document.getElementById('videoZone').classList.remove('dragover');
+  if (e.dataTransfer.files[0]) processVideo(e.dataTransfer.files[0]);
+}
+
+function handleVideoSelect(e) { processVideo(e.target.files[0]); }
+
+function processVideo(file) {
+  if (!file || !file.type.startsWith('video/')) { showToast('الرجاء اختيار فيديو صحيح','err'); return; }
+  videoFile = file;
+  const url = URL.createObjectURL(file);
+  const vid = document.getElementById('previewVideo');
+  vid.src = url;
+  vid.onloadedmetadata = () => {
+    document.getElementById('videoPreview').style.display = 'block';
+    document.getElementById('videoSettings').style.display = 'block';
+    document.getElementById('analyzeBtn').disabled = false; currentMode='video';
+    document.getElementById('videoMeta').textContent =
+      `${file.name} • ${(file.size/1024/1024).toFixed(1)} MB • مدة: ${Math.floor(vid.duration)}ث`;
+    updateExpectedFrames();
+    showToast('✅ تم رفع الفيديو','ok');
+  };
+}
+
+function clearVideo() {
+  videoFile = null;
+  document.getElementById('previewVideo').src = '';
+  document.getElementById('videoPreview').style.display = 'none';
+  document.getElementById('videoSettings').style.display = 'none';
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('videoProgress').style.display = 'none';
+  document.getElementById('droneVideoInput').value = '';
+}
+
+/* ── EXTRACT FRAME FROM VIDEO ── */
+function extractFrame(video, timeSeconds) {
+  return new Promise((resolve) => {
+    video.currentTime = timeSeconds;
+    video.onseeked = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.min(video.videoWidth, 1280);
+      canvas.height = Math.round(canvas.width * video.videoHeight / video.videoWidth);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => {
+        const reader = new FileReader();
+        reader.onload = (e) => resolve({ dataUrl: e.target.result, base64: e.target.result.split(',')[1] });
+        reader.readAsDataURL(blob);
+      }, 'image/jpeg', 0.85);
+    };
+  });
+}
+
+/* ── ANALYZE VIDEO ── */
+async function analyzeVideo() {
+  if (!geminiKey) { openApiModal(); return; }
+  if (!videoFile) { showToast('ارفع فيديو أولاً','err'); return; }
+  if (videoAnalysisRunning) { showToast('التحليل جاري بالفعل...','err'); return; }
+
+  // Get GPS — priority: detected (locateMe) > manual input
+  let baseLat, baseLng, area;
+  if (detectedGPS) {
+    baseLat = detectedGPS.lat;
+    baseLng = detectedGPS.lng;
+    area = document.getElementById('droneArea')?.value || document.getElementById('droneAreaAuto')?.value || 'منطقة مجهولة';
+  } else {
+    baseLat = parseFloat(document.getElementById('droneLat')?.value);
+    baseLng = parseFloat(document.getElementById('droneLng')?.value);
+    area = document.getElementById('droneArea')?.value || 'منطقة غير محددة';
+  }
+
+  // If no GPS — open manual input and warn
+  if (!baseLat || !baseLng || isNaN(baseLat) || isNaN(baseLng)) {
+    // Auto-open manual GPS panel
+    if (!manualGpsOpen) toggleManualGPS();
+    showToast('⚠️ أدخل إحداثيات الدرون أولاً ثم اضغط تحليل مجدداً','err');
+    document.getElementById('droneLat').focus();
+    return;
+  }
+
+  const vid = document.getElementById('previewVideo');
+  const duration = vid.duration;
+  const times = [];
+  for (let t = 0; t < duration; t += videoInterval) times.push(parseFloat(t.toFixed(1)));
+
+  const totalFrames = times.length;
+  videoAnalysisRunning = true;
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('videoProgress').style.display = 'block';
+
+  let pointsFound = 0;
+  // Add drone start marker
+  L.marker([baseLat, baseLng], {icon: droneIcon}).addTo(map)
+    .bindPopup(`<div style="font-family:Tajawal;direction:rtl;"><b>🚁 بداية المسار</b><br><small>${area}</small></div>`);
+  map.flyTo([baseLat, baseLng], 14, {duration: 1});
+
+  for (let i = 0; i < times.length; i++) {
+    const t = times[i];
+    const pct = Math.round((i / totalFrames) * 100);
+
+    document.getElementById('vpPercent').textContent = pct + '%';
+    document.getElementById('vpFill').style.width = pct + '%';
+    document.getElementById('vpLabel').textContent = `فريم ${i+1} من ${totalFrames}`;
+    document.getElementById('vpSub').textContent = `الوقت: ${t}ث — نقاط مكتشفة: ${pointsFound}`;
+
+    try {
+      const frame = await extractFrame(vid, t);
+      // Simulate slight drone movement along path
+      const frameLat = baseLat + (i * 0.00008);
+      const frameLng = baseLng + (i * 0.00008);
+
+      const prompt = `You are an AI analyzing a drone video frame to detect trash and waste.
+Frame time: ${t}s of ${duration.toFixed(0)}s. Drone GPS: ${frameLat.toFixed(6)},${frameLng.toFixed(6)}.
+
+Look carefully for any trash, garbage, waste piles, litter, or pollution in this frame.
+
+RESPOND WITH ONLY VALID JSON (no markdown):
+If trash found: {"hasTrash":true,"spots":[{"name":"اسم الموقع","description":"وصف المهملات بالعربي","confidence":"high","latOffset":0.0001,"lngOffset":0.0002}]}
+If no trash: {"hasTrash":false,"spots":[]}
+
+Rules: latOffset/lngOffset are VERY SMALL offsets (max ±0.0003 degrees). Drone at ~50-100m altitude covers ~100m area. Be thorough — report every visible trash area.`;
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiKey}`,
+        {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({
+            contents:[{parts:[
+              {inline_data:{mime_type:'image/jpeg', data:frame.base64}},
+              {text:prompt}
+            ]}],
+            generationConfig:{temperature:0.1, maxOutputTokens:800}
+          })
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        let text = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+        text = text.replace(/```json\n?/gi,'').replace(/```\n?/gi,'').trim();
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const result = JSON.parse(jsonMatch[0]);
+          if (result.hasTrash && result.spots?.length) {
+            result.spots.forEach(spot => {
+              const sLat = frameLat + (parseFloat(spot.latOffset)||0);
+              const sLng = frameLng + (parseFloat(spot.lngOffset)||0);
+              const gmapsLink = `https://www.google.com/maps?q=${sLat},${sLng}`;
+              const navLink = `https://www.google.com/maps/dir/?api=1&destination=${sLat},${sLng}`;
+              const icon = spot.confidence==='high' ? trashIcon : medIcon;
+              const marker = L.marker([sLat,sLng],{icon}).addTo(map)
+                .bindPopup(`<div style="font-family:Tajawal;direction:rtl;min-width:200px;padding:4px;">
+                  <b>🗑️ ${spot.name}</b><br>
+                  <small style="color:#888;">ث${t} — ${sLat.toFixed(5)}, ${sLng.toFixed(5)}</small><br>
+                  <div style="margin:5px 0;font-size:12px;">${spot.description||''}</div>
+                  <div style="display:flex;gap:5px;margin-top:6px;">
+                    <a href="${gmapsLink}" target="_blank" style="flex:1;display:block;background:#4285f4;color:#fff;text-align:center;padding:5px;border-radius:6px;font-size:11px;text-decoration:none;">🗺️ عرض</a>
+                    <a href="${navLink}" target="_blank" style="flex:1;display:block;background:#00c853;color:#fff;text-align:center;padding:5px;border-radius:6px;font-size:11px;text-decoration:none;">🧭 توجيه</a>
+                  </div></div>`);
+              trashPoints.push({name:spot.name, lat:sLat, lng:sLng, confidence:spot.confidence,
+                description:spot.description||'', gmapsLink, marker, id:Date.now()+Math.random()});
+              pointsFound++;
+            });
+            updatePointsUI();
+            // Pan map to latest finding
+            const lastPt = trashPoints[trashPoints.length-1];
+            map.panTo([lastPt.lat, lastPt.lng], {animate:true, duration:0.5});
+          }
+        }
+      }
+    } catch(e) { console.warn('Frame error at',t,e); }
+
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  // Done
+  document.getElementById('vpPercent').textContent = '100%';
+  document.getElementById('vpFill').style.width = '100%';
+  document.getElementById('vpLabel').textContent = `✅ اكتمل التحليل`;
+  document.getElementById('vpSub').textContent = `تم تحليل ${totalFrames} فريم — وُجد ${pointsFound} نقطة مهملات`;
+  videoAnalysisRunning = false;
+  document.getElementById('analyzeBtn').disabled = false;
+
+  if (pointsFound > 0) {
+    // Zoom to show all points
+    const bounds = L.latLngBounds(trashPoints.map(p=>[p.lat,p.lng]));
+    map.flyToBounds(bounds, {padding:[40,40], duration:1.5});
+    showToast(`✅ ${pointsFound} نقطة مهملات على الخريطة!`,'ok');
+    switchTab('points');
+  } else {
+    showToast('✅ اكتمل — لم تُكتشف مهملات واضحة','ok');
+  }
+
+  document.getElementById('hImages').textContent =
+    parseInt(document.getElementById('hImages').textContent||0) + totalFrames;
+}
+
+</script>
+</body>
+</html>
